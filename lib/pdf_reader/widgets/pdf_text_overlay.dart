@@ -100,28 +100,35 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
       children: _pageText!.fragments.map((fragment) {
         // Calculate the bounding box for this text fragment scaled to the pageRect.
         final left = fragment.bounds.left * scaleX;
-        final top = fragment.bounds.top * scaleY;
         final right = fragment.bounds.right * scaleX;
-        final bottom = fragment.bounds.bottom * scaleY;
+        
+        // PDF coordinates origin is bottom-left, Flutter is top-left.
+        // We need to flip the Y axis: FlutterY = (PageHeight - PdfY) * scaleY
+        final top = (widget.page.height - fragment.bounds.top) * scaleY;
+        final bottom = (widget.page.height - fragment.bounds.bottom) * scaleY;
 
-        final width = right - left;
-        final height = bottom - top;
+        final width = (right - left).abs();
+        final height = (bottom - top).abs();
 
-        final fontSize = height * 0.9;
+        // Ensure we have a valid positive font size
+        final fontSize = height > 0 ? height * 0.9 : 1.0;
 
         return Positioned(
           left: left,
           top: top - (height * 0.1), // Slight visual adjustment
           width: width,
           height: height * 1.2, // Give it a bit more hit area vertically
-          child: TappableTextWrapper(
-            showPopupDict: true,
-            child: Text(
-              fragment.text,
-              style: TextStyle(
-                fontSize: fontSize,
-                color: Colors.transparent, // Invisible, just used for hit testing/popups
-                height: 1.0,
+          child: FittedBox(
+            fit: BoxFit.fitWidth,
+            child: TappableTextWrapper(
+              showPopupDict: true,
+              child: Text(
+                fragment.text,
+                style: TextStyle(
+                  fontSize: fontSize,
+                  color: Colors.transparent, // Invisible, just used for hit testing/popups
+                  height: 1.0,
+                ),
               ),
             ),
           ),
