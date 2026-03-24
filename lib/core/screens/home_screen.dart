@@ -14,8 +14,8 @@ class HomeScreen extends StatelessWidget with WatchItMixin {
   @override
   Widget build(BuildContext context) {
     final tabService = getIt<TabService>();
-    final tabs = watchValue((TabService s) => s.tabs);
-    final activeIndex = watchValue((TabService s) => s.activeIndex);
+    final tabs = watchValue<TabService, List<TabModel>>((s) => s.tabs);
+    final activeIndex = watchValue<TabService, int>((s) => s.activeIndex);
 
     return Scaffold(
       appBar: AppBar(
@@ -162,9 +162,6 @@ class _TabBar extends StatelessWidget {
                         ? Icons.picture_as_pdf_outlined
                         : Icons.description_outlined,
                     size: 16,
-                    color: isActive
-                        ? colorScheme.primary
-                        : colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(width: 6),
                   Text(

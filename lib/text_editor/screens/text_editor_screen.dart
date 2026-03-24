@@ -11,7 +11,7 @@ import 'package:hankan_chinese_reader/text_editor/widgets/text_read_view.dart';
 import 'package:hankan_chinese_reader/text_editor/widgets/text_search_bar.dart';
 
 /// Screen for editing and reading a text document.
-class TextEditorScreen extends StatefulWidget {
+class TextEditorScreen extends WatchingStatefulWidget {
   /// The tab ID this editor belongs to.
   final String tabId;
 
@@ -21,7 +21,7 @@ class TextEditorScreen extends StatefulWidget {
   State<TextEditorScreen> createState() => _TextEditorScreenState();
 }
 
-class _TextEditorScreenState extends State<TextEditorScreen> with WatchItMixin {
+class _TextEditorScreenState extends State<TextEditorScreen> {
   late final TextEditorService _editorService;
   bool _showSearch = false;
 
@@ -74,14 +74,8 @@ class _TextEditorScreenState extends State<TextEditorScreen> with WatchItMixin {
 
   @override
   Widget build(BuildContext context) {
-    final isReadMode = watchValue(
-      target: _editorService,
-      (TextEditorService s) => s.isReadMode,
-    );
-    final content = watchValue(
-      target: _editorService,
-      (TextEditorService s) => s.content,
-    );
+    final isReadMode = watch(_editorService.isReadMode).value;
+    final content = watch(_editorService.content).value;
 
     return CallbackShortcuts(
       bindings: {
