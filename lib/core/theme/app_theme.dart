@@ -26,7 +26,25 @@ class AppTheme {
   }
 
   static ThemeData _buildTheme(ColorScheme colorScheme) {
-    final textTheme = GoogleFonts.notoSansScTextTheme();
+    final textTheme = GoogleFonts.notoSansScTextTheme(
+      TextTheme(
+        displayLarge: TextStyle(color: colorScheme.onSurface),
+        displayMedium: TextStyle(color: colorScheme.onSurface),
+        displaySmall: TextStyle(color: colorScheme.onSurface),
+        headlineLarge: TextStyle(color: colorScheme.onSurface),
+        headlineMedium: TextStyle(color: colorScheme.onSurface),
+        headlineSmall: TextStyle(color: colorScheme.onSurface),
+        titleLarge: TextStyle(color: colorScheme.onSurface),
+        titleMedium: TextStyle(color: colorScheme.onSurface),
+        titleSmall: TextStyle(color: colorScheme.onSurface),
+        bodyLarge: TextStyle(color: colorScheme.onSurface),
+        bodyMedium: TextStyle(color: colorScheme.onSurface),
+        bodySmall: TextStyle(color: colorScheme.onSurfaceVariant),
+        labelLarge: TextStyle(color: colorScheme.onSurface),
+        labelMedium: TextStyle(color: colorScheme.onSurface),
+        labelSmall: TextStyle(color: colorScheme.onSurfaceVariant),
+      ),
+    );
 
     return ThemeData(
       useMaterial3: true,
@@ -50,9 +68,7 @@ class AppTheme {
         foregroundColor: colorScheme.onPrimaryContainer,
       ),
       inputDecorationTheme: InputDecorationTheme(
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         filled: true,
         fillColor: colorScheme.surfaceContainerLowest,
       ),
