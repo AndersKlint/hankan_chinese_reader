@@ -1,18 +1,18 @@
 ## 1. Project Setup & Dependencies
 
-- [ ] 1.1 Update `pubspec.yaml` with all dependencies: `chinese_popup_dict` (path), `get_it`, `watch_it`, `pdfrx`, `file_picker`, `google_fonts`
-- [ ] 1.2 Run `flutter pub get` and resolve any dependency conflicts
-- [ ] 1.3 Create folder structure: `lib/core/`, `lib/text_editor/`, `lib/pdf_reader/`
+- [x] 1.1 Update `pubspec.yaml` with all dependencies: `chinese_popup_dict` (path), `get_it`, `watch_it`, `pdfrx`, `file_picker`, `google_fonts`
+- [x] 1.2 Run `flutter pub get` and resolve any dependency conflicts
+- [x] 1.3 Create folder structure: `lib/core/`, `lib/text_editor/`, `lib/pdf_reader/`
 
 ## 2. Core / App Shell
 
-- [ ] 2.1 Create `lib/core/theme/app_theme.dart` — Material 3 theme with light/dark mode, Google Font
-- [ ] 2.2 Create `lib/core/models/tab_model.dart` — data model for open document tabs (enum for type, file path, title, modified flag)
-- [ ] 2.3 Create `lib/core/services/tab_service.dart` — manages open tabs via `ValueNotifier<List<TabModel>>` and active index
-- [ ] 2.4 Create `lib/core/services/file_service.dart` — open/save file dialogs, read/write file contents
-- [ ] 2.5 Create `lib/core/service_locator.dart` — register all app services with `get_it`; call `setupChinesePopupDict()`
-- [ ] 2.6 Create `lib/main.dart` — app entry point with initialization, `MaterialApp`, and root shell
-- [ ] 2.7 Create `lib/core/screens/home_screen.dart` — tab bar, menu/toolbar, content area switching between text-editor and pdf-reader per tab
+- [x] 2.1 Create `lib/core/theme/app_theme.dart` — Material 3 theme with light/dark mode, Google Font
+- [x] 2.2 Create `lib/core/models/tab_model.dart` — data model for open document tabs (enum for type, file path, title, modified flag)
+- [x] 2.3 Create `lib/core/services/tab_service.dart` — manages open tabs via `ValueNotifier<List<TabModel>>` and active index
+- [x] 2.4 Create `lib/core/services/file_service.dart` — open/save file dialogs, read/write file contents
+- [x] 2.5 Create `lib/core/service_locator.dart` — register all app services with `get_it`; call `setupChinesePopupDict()`
+- [x] 2.6 Create `lib/main.dart` — app entry point with initialization, `MaterialApp`, and root shell
+- [x] 2.7 Create `lib/core/screens/home_screen.dart` — tab bar, menu/toolbar, content area switching between text-editor and pdf-reader per tab
 
 ## 3. Text Editor Mode
 
