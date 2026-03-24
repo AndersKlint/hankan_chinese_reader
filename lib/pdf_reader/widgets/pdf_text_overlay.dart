@@ -36,7 +36,12 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
     }
   }
 
+  int _loadingPageNumber = -1;
+
   Future<void> _loadText() async {
+    final pageNumber = widget.page.pageNumber;
+    _loadingPageNumber = pageNumber;
+
     setState(() {
       _isLoading = true;
       _hasCalculatedText = false;
@@ -44,7 +49,7 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
 
     try {
       final text = await widget.page.loadStructuredText();
-      if (mounted) {
+      if (mounted && _loadingPageNumber == pageNumber) {
         setState(() {
           _pageText = text;
           _isLoading = false;
@@ -52,7 +57,7 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && _loadingPageNumber == pageNumber) {
         setState(() {
           _isLoading = false;
           _hasCalculatedText = true;
