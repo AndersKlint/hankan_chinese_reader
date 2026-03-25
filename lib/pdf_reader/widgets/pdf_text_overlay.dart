@@ -101,9 +101,9 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
 
         return Positioned(
           left: rect.left,
-          top: rect.top,
+          top: rect.top -  2, // Hidden text layer is usually offset a bit.
           width: rect.width,
-          height: rect.height,
+          height: rect.height * 1.1, // Hidden text layer is usually a bit smaller than actual text.
           child: FittedBox(
             fit: BoxFit.fill,
             alignment: Alignment.topLeft,
@@ -111,6 +111,8 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
               showPopupDict: true,
               child: Text(
                 fragment.text,
+                maxLines: 1,
+                softWrap: false,
                 style: const TextStyle(
                   fontSize: 20,
                   color: Colors.transparent,
@@ -118,6 +120,7 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
                   leadingDistribution: TextLeadingDistribution.even,
                 ),
                 strutStyle: const StrutStyle(
+                  fontSize: 20,
                   forceStrutHeight: true,
                   height: 1.0,
                   leading: 0,

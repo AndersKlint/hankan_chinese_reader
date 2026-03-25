@@ -26,14 +26,14 @@ class AppTheme {
       brightness: Brightness.dark,
     );
     final colorScheme = baseColorScheme.copyWith(
-      surface: const Color(0xFF1E1E1E),
-      surfaceContainerHighest: const Color(0xFF2D2D2D),
-      surfaceContainerHigh: const Color(0xFF252526),
-      surfaceContainer: const Color(0xFF252526),
-      surfaceContainerLow: const Color(0xFF1E1E1E),
-      surfaceContainerLowest: const Color(0xFF181818),
-      onSurface: const Color(0xFFCCCCCC),
-      onSurfaceVariant: const Color(0xFF858585),
+      surface: const Color(0xFF252527),
+      surfaceContainerHighest: const Color(0xFF3A3A3C),
+      surfaceContainerHigh: const Color(0xFF323234),
+      surfaceContainer: const Color(0xFF323234),
+      surfaceContainerLow: const Color(0xFF2A2A2C),
+      surfaceContainerLowest: const Color(0xFF1F1F21),
+      onSurface: const Color(0xFFE8E8E8),
+      onSurfaceVariant: const Color(0xFF999999),
     );
     return _buildTheme(colorScheme);
   }

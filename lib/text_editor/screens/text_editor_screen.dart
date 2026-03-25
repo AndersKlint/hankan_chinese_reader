@@ -170,11 +170,13 @@ class _Toolbar extends StatelessWidget {
       child: Row(
         children: [
           // Edit / Read toggle
-          IconButton(
-            icon: Icon(isReadMode ? Icons.edit_outlined : Icons.auto_stories),
-            tooltip: isReadMode ? 'Switch to edit mode' : 'Switch to read mode',
+          TextButton.icon(
+            icon: Icon(
+              isReadMode ? Icons.edit_outlined : Icons.auto_stories,
+              size: 18,
+            ),
+            label: Text(isReadMode ? 'Edit' : 'Read'),
             onPressed: onToggleMode,
-            iconSize: 20,
           ),
           const VerticalDivider(indent: 10, endIndent: 10),
 

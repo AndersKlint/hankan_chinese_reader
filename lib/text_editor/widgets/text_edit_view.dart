@@ -47,6 +47,9 @@ class _TextEditViewState extends State<TextEditView> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = colorScheme.brightness == Brightness.dark;
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: TextField(
@@ -54,13 +57,17 @@ class _TextEditViewState extends State<TextEditView> {
         maxLines: null,
         expands: true,
         textAlignVertical: TextAlignVertical.top,
-        style: Theme.of(
-          context,
-        ).textTheme.bodyLarge?.copyWith(fontSize: 18, height: 1.8),
-        decoration: const InputDecoration(
+        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+          fontSize: 18,
+          height: 1.8,
+          color: isDark ? const Color(0xFFE8E8E8) : Colors.black,
+        ),
+        decoration: InputDecoration(
           border: InputBorder.none,
           hintText: 'Enter Chinese text here...',
-          contentPadding: EdgeInsets.all(16),
+          contentPadding: const EdgeInsets.all(16),
+          filled: true,
+          fillColor: isDark ? const Color(0xFF3A3A3C) : const Color(0xFFF0F0F0),
         ),
         onChanged: (text) {
           if (!_ignoreChange) {
