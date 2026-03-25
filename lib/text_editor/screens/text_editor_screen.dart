@@ -84,7 +84,8 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
           LogicalKeyboardKey.keyZ,
           control: true,
           shift: true,
-        ): () => _editorService.redo(),
+        ): () =>
+            _editorService.redo(),
         const SingleActivator(LogicalKeyboardKey.keyS, control: true): _save,
         const SingleActivator(LogicalKeyboardKey.keyF, control: true): () =>
             setState(() => _showSearch = !_showSearch),
@@ -121,8 +122,9 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
                         _editorService.updateContent(text);
                         // Keep tab model in sync.
                         final tabService = getIt<TabService>();
-                        final tab = tabService.tabs.value
-                            .firstWhere((t) => t.id == widget.tabId);
+                        final tab = tabService.tabs.value.firstWhere(
+                          (t) => t.id == widget.tabId,
+                        );
                         tab.textContent = text;
                       },
                     ),
@@ -162,10 +164,7 @@ class _Toolbar extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow,
         border: Border(
-          bottom: BorderSide(
-            color: colorScheme.outlineVariant,
-            width: 0.5,
-          ),
+          bottom: BorderSide(color: colorScheme.outlineVariant, width: 0.5),
         ),
       ),
       child: Row(

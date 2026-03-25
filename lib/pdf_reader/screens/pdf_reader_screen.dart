@@ -3,8 +3,10 @@ import 'package:pdfrx/pdfrx.dart';
 import 'package:hankan_chinese_reader/core/service_locator.dart';
 import 'package:hankan_chinese_reader/core/services/tab_service.dart';
 import 'package:hankan_chinese_reader/pdf_reader/widgets/pdf_text_overlay.dart';
+import 'package:hankan_chinese_reader/pdf_reader/widgets/pdf_toolbar.dart';
+import 'package:hankan_chinese_reader/pdf_reader/widgets/pdf_thumbnail_sidebar.dart';
 
-/// Screen for reading a PDF document with popup dictionary support.
+/// Screen for reading a PDF document with popup dictionary support and desktop features.
 class PdfReaderScreen extends StatefulWidget {
   final String tabId;
 
@@ -16,10 +18,15 @@ class PdfReaderScreen extends StatefulWidget {
 
 class _PdfReaderScreenState extends State<PdfReaderScreen> {
   final PdfViewerController _pdfController = PdfViewerController();
+  PdfTextSearcher? _textSearcher;
 
   String? _filePath;
   int _currentPage = 1;
   int _pageCount = 0;
+
+  bool _showThumbnails = false;
+  bool _showSearchBar = false;
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -34,6 +41,8 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   @override
   void dispose() {
     _pdfController.removeListener(_onPdfStateChanged);
+    _textSearcher?.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -49,41 +58,20 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
     }
   }
 
-  Future<void> _jumpToPage() async {
-    final controller = TextEditingController(text: _currentPage.toString());
-    final number = await showDialog<int>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Go to page'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          autofocus: true,
-          decoration: InputDecoration(hintText: '1 - $_pageCount'),
-          onSubmitted: (value) {
-            final n = int.tryParse(value);
-            Navigator.pop(context, n);
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final n = int.tryParse(controller.text);
-              Navigator.pop(context, n);
-            },
-            child: const Text('Go'),
-          ),
-        ],
-      ),
-    );
-
-    if (number != null && number > 0 && number <= _pageCount) {
-      _pdfController.goToPage(pageNumber: number);
+  void _jumpToPage(int pageNumber) {
+    if (pageNumber > 0 && pageNumber <= _pageCount) {
+      _pdfController.goToPage(pageNumber: pageNumber);
     }
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _showSearchBar = !_showSearchBar;
+      if (!_showSearchBar) {
+        _searchController.clear();
+        _textSearcher?.resetTextSearch();
+      }
+    });
   }
 
   @override
@@ -94,57 +82,92 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
 
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Stack(
+    return Column(
       children: [
-        PdfViewer.file(
-          _filePath!,
-          controller: _pdfController,
-          params: PdfViewerParams(
-            // Disable pdfrx's built-in text selection; our PdfTextOverlay
-            // handles text interaction with popup dictionary support.
-            textSelectionParams: const PdfTextSelectionParams(enabled: false),
-            pageOverlaysBuilder: (context, pageRect, page) {
-              return [
-                PdfTextOverlay(
-                  page: page,
-                  pageRect: pageRect,
-                ),
-              ];
-            },
-          ),
+        // Top Toolbar
+        PdfToolbar(
+          showThumbnails: _showThumbnails,
+          onToggleThumbnails: () =>
+              setState(() => _showThumbnails = !_showThumbnails),
+          showSearchBar: _showSearchBar,
+          onToggleSearch: _toggleSearch,
+          searchController: _searchController,
+          textSearcher: _textSearcher,
+          currentPage: _currentPage,
+          pageCount: _pageCount,
+          onPageSubmitted: _jumpToPage,
         ),
+        Expanded(
+          child: Row(
+            children: [
+              // Left Thumbnail Sidebar
+              if (_showThumbnails)
+                PdfThumbnailSidebar(
+                  filePath: _filePath!,
+                  currentPage: _currentPage,
+                  onPageTapped: _jumpToPage,
+                ),
 
-        // Page Indicator & Jump
-        if (_pageCount > 0)
-          Positioned(
-            bottom: 24,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Material(
-                color: colorScheme.surfaceContainerHigh.withValues(alpha: 0.9),
-                borderRadius: BorderRadius.circular(20),
-                elevation: 2,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: _jumpToPage,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
+              // PDF Viewer
+              Expanded(
+                child: PdfViewer.file(
+                  _filePath!,
+                  controller: _pdfController,
+                  params: PdfViewerParams(
+                    onViewerReady: (document, controller) {
+                      setState(() {
+                        _textSearcher = PdfTextSearcher(_pdfController);
+                      });
+                    },
+                    // Disable pdfrx's built-in text selection; our PdfTextOverlay
+                    // handles text interaction with popup dictionary support.
+                    textSelectionParams: const PdfTextSelectionParams(
+                      enabled: false,
                     ),
-                    child: Text(
-                      '$_currentPage / $_pageCount',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface,
+                    pageOverlaysBuilder: (context, pageRect, page) {
+                      return [PdfTextOverlay(page: page, pageRect: pageRect)];
+                    },
+                    // Add vertical scrollbar
+                    viewerOverlayBuilder: (context, size, handleLinkTap) => [
+                      PdfViewerScrollThumb(
+                        controller: _pdfController,
+                        orientation: ScrollbarOrientation.right,
+                        thumbBuilder:
+                            (context, thumbSize, pageNumber, controller) {
+                              return Container(
+                                decoration: BoxDecoration(
+                                  color: colorScheme.primary.withValues(
+                                    alpha: 0.8,
+                                  ),
+                                  borderRadius: BorderRadius.circular(
+                                    thumbSize.width / 2,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    pageNumber?.toString() ?? '',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
                       ),
-                    ),
+                    ],
+                    // Highlight search matches
+                    pagePaintCallbacks: [
+                      if (_textSearcher != null)
+                        _textSearcher!.pageTextMatchPaintCallback,
+                    ],
                   ),
                 ),
               ),
-            ),
+            ],
           ),
+        ),
       ],
     );
   }

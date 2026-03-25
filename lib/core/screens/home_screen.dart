@@ -4,6 +4,7 @@ import 'package:hankan_chinese_reader/core/models/tab_model.dart';
 import 'package:hankan_chinese_reader/core/service_locator.dart';
 import 'package:hankan_chinese_reader/core/services/file_service.dart';
 import 'package:hankan_chinese_reader/core/services/tab_service.dart';
+import 'package:hankan_chinese_reader/core/services/theme_service.dart';
 import 'package:hankan_chinese_reader/text_editor/screens/text_editor_screen.dart';
 import 'package:hankan_chinese_reader/pdf_reader/screens/pdf_reader_screen.dart';
 
@@ -14,37 +15,55 @@ class HomeScreen extends StatelessWidget with WatchItMixin {
   @override
   Widget build(BuildContext context) {
     final tabService = getIt<TabService>();
+    final themeService = getIt<ThemeService>();
     final tabs = watchValue<TabService, List<TabModel>>((s) => s.tabs);
     final activeIndex = watchValue<TabService, int>((s) => s.activeIndex);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Hankan Chinese Reader'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.note_add_outlined),
-            tooltip: 'New text document',
-            onPressed: () => _createNewDocument(tabService),
-          ),
-          IconButton(
-            icon: const Icon(Icons.folder_open_outlined),
-            tooltip: 'Open file',
-            onPressed: () => _openFile(context, tabService),
-          ),
-        ],
-        bottom: tabs.isEmpty
-            ? null
-            : PreferredSize(
-                preferredSize: const Size.fromHeight(40),
-                child: _TabBar(
-                  tabs: tabs,
-                  activeIndex: activeIndex,
-                  onSelect: tabService.setActiveTab,
-                  onClose: tabService.closeTab,
+    return ListenableBuilder(
+      listenable: themeService,
+      builder: (context, _) {
+        final themeMode = themeService.value;
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Hankan Chinese Reader'),
+            actions: [
+              IconButton(
+                icon: Icon(
+                  themeMode == ThemeMode.dark
+                      ? Icons.light_mode_outlined
+                      : Icons.dark_mode_outlined,
                 ),
+                tooltip: themeMode == ThemeMode.dark
+                    ? 'Switch to light mode'
+                    : 'Switch to dark mode',
+                onPressed: () => themeService.toggleTheme(),
               ),
-      ),
-      body: _buildBody(tabs, activeIndex),
+              IconButton(
+                icon: const Icon(Icons.note_add_outlined),
+                tooltip: 'New text document',
+                onPressed: () => _createNewDocument(tabService),
+              ),
+              IconButton(
+                icon: const Icon(Icons.folder_open_outlined),
+                tooltip: 'Open file',
+                onPressed: () => _openFile(context, tabService),
+              ),
+            ],
+            bottom: tabs.isEmpty
+                ? null
+                : PreferredSize(
+                    preferredSize: const Size.fromHeight(40),
+                    child: _TabBar(
+                      tabs: tabs,
+                      activeIndex: activeIndex,
+                      onSelect: tabService.setActiveTab,
+                      onClose: tabService.closeTab,
+                    ),
+                  ),
+          ),
+          body: _buildBody(tabs, activeIndex),
+        );
+      },
     );
   }
 
@@ -87,11 +106,7 @@ class HomeScreen extends StatelessWidget with WatchItMixin {
     final extension = name.split('.').last.toLowerCase();
 
     if (extension == 'pdf') {
-      tabService.addTab(
-        title: name,
-        type: DocumentType.pdf,
-        filePath: path,
-      );
+      tabService.addTab(title: name, type: DocumentType.pdf, filePath: path);
     } else {
       // Text file.
       String content;
@@ -168,8 +183,9 @@ class _TabBar extends StatelessWidget {
                     '${tab.title}${tab.isModified ? ' •' : ''}',
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight:
-                          isActive ? FontWeight.w600 : FontWeight.normal,
+                      fontWeight: isActive
+                          ? FontWeight.w600
+                          : FontWeight.normal,
                       color: isActive
                           ? colorScheme.primary
                           : colorScheme.onSurfaceVariant,

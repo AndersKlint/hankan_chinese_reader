@@ -8,11 +8,7 @@ class TextSearchBar extends StatefulWidget {
   /// Called when the search bar is closed.
   final VoidCallback onClose;
 
-  const TextSearchBar({
-    super.key,
-    required this.text,
-    required this.onClose,
-  });
+  const TextSearchBar({super.key, required this.text, required this.onClose});
 
   @override
   State<TextSearchBar> createState() => _TextSearchBarState();
@@ -68,7 +64,7 @@ class _TextSearchBarState extends State<TextSearchBar> {
     setState(() {
       _currentMatchIndex =
           (_currentMatchIndex - 1 + _matchPositions.length) %
-              _matchPositions.length;
+          _matchPositions.length;
     });
   }
 
@@ -85,10 +81,7 @@ class _TextSearchBarState extends State<TextSearchBar> {
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHigh,
         border: Border(
-          bottom: BorderSide(
-            color: colorScheme.outlineVariant,
-            width: 0.5,
-          ),
+          bottom: BorderSide(color: colorScheme.outlineVariant, width: 0.5),
         ),
       ),
       child: Row(
@@ -111,10 +104,7 @@ class _TextSearchBarState extends State<TextSearchBar> {
           const SizedBox(width: 8),
           Text(
             matchText,
-            style: TextStyle(
-              fontSize: 12,
-              color: colorScheme.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
           ),
           IconButton(
             icon: const Icon(Icons.keyboard_arrow_up, size: 20),

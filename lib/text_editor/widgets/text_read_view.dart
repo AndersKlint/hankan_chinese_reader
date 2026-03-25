@@ -15,11 +15,10 @@ class TextReadView extends StatelessWidget {
         child: Text(
           'No text to display. Switch to edit mode to add text.',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context)
-                    .colorScheme
-                    .onSurfaceVariant
-                    .withValues(alpha: 0.6),
-              ),
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+          ),
         ),
       );
     }
@@ -32,10 +31,9 @@ class TextReadView extends StatelessWidget {
           showPopupDict: true,
           child: Text(
             text,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  fontSize: 20,
-                  height: 2.0,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(fontSize: 20, height: 2.0),
           ),
         ),
       ),

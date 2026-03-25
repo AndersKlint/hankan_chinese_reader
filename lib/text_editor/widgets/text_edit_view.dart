@@ -54,10 +54,9 @@ class _TextEditViewState extends State<TextEditView> {
         maxLines: null,
         expands: true,
         textAlignVertical: TextAlignVertical.top,
-        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              fontSize: 18,
-              height: 1.8,
-            ),
+        style: Theme.of(
+          context,
+        ).textTheme.bodyLarge?.copyWith(fontSize: 18, height: 1.8),
         decoration: const InputDecoration(
           border: InputBorder.none,
           hintText: 'Enter Chinese text here...',

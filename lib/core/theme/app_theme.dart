@@ -9,18 +9,31 @@ class AppTheme {
 
   /// Light theme.
   static ThemeData get light {
-    final colorScheme = ColorScheme.fromSeed(
+    final baseColorScheme = ColorScheme.fromSeed(
       seedColor: _seedColor,
       brightness: Brightness.light,
+    );
+    final colorScheme = baseColorScheme.copyWith(
+      surfaceContainerLowest: baseColorScheme.surfaceContainerHighest,
     );
     return _buildTheme(colorScheme);
   }
 
   /// Dark theme.
   static ThemeData get dark {
-    final colorScheme = ColorScheme.fromSeed(
+    final baseColorScheme = ColorScheme.fromSeed(
       seedColor: _seedColor,
       brightness: Brightness.dark,
+    );
+    final colorScheme = baseColorScheme.copyWith(
+      surface: const Color(0xFF1E1E1E),
+      surfaceContainerHighest: const Color(0xFF2D2D2D),
+      surfaceContainerHigh: const Color(0xFF252526),
+      surfaceContainer: const Color(0xFF252526),
+      surfaceContainerLow: const Color(0xFF1E1E1E),
+      surfaceContainerLowest: const Color(0xFF181818),
+      onSurface: const Color(0xFFCCCCCC),
+      onSurfaceVariant: const Color(0xFF858585),
     );
     return _buildTheme(colorScheme);
   }

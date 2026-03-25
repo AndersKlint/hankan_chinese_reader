@@ -4,8 +4,7 @@ import 'package:hankan_chinese_reader/core/models/tab_model.dart';
 /// Manages the collection of open document tabs.
 class TabService {
   /// The list of currently open tabs.
-  final ValueNotifier<List<TabModel>> tabs =
-      ValueNotifier<List<TabModel>>([]);
+  final ValueNotifier<List<TabModel>> tabs = ValueNotifier<List<TabModel>>([]);
 
   /// The index of the currently active tab, or -1 if none.
   final ValueNotifier<int> activeIndex = ValueNotifier<int>(-1);
