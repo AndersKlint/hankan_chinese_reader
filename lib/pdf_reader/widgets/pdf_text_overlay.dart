@@ -105,16 +105,23 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
           width: rect.width,
           height: rect.height,
           child: FittedBox(
-            fit: BoxFit.fitWidth,
+            fit: BoxFit.fill,
             alignment: Alignment.topLeft,
             child: TappableTextWrapper(
               showPopupDict: true,
               child: Text(
                 fragment.text,
-                style: TextStyle(
-                  fontSize: rect.height,
+                style: const TextStyle(
+                  fontSize: 20,
                   color: Colors.transparent,
                   height: 1.0,
+                  leadingDistribution: TextLeadingDistribution.even,
+                ),
+                strutStyle: const StrutStyle(
+                  forceStrutHeight: true,
+                  height: 1.0,
+                  leading: 0,
+                  leadingDistribution: TextLeadingDistribution.even,
                 ),
               ),
             ),

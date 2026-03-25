@@ -100,12 +100,9 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
           _filePath!,
           controller: _pdfController,
           params: PdfViewerParams(
-            // Setup custom page rendering to include the text overlay.
-            pagePaintCallbacks: [
-              (canvas, pageRect, page) {
-                // Return nothing as it's a void function.
-              }
-            ],
+            // Disable pdfrx's built-in text selection; our PdfTextOverlay
+            // handles text interaction with popup dictionary support.
+            textSelectionParams: const PdfTextSelectionParams(enabled: false),
             pageOverlaysBuilder: (context, pageRect, page) {
               return [
                 PdfTextOverlay(
