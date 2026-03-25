@@ -7,11 +7,7 @@ class PdfTextOverlay extends StatefulWidget {
   final PdfPage page;
   final Rect pageRect;
 
-  const PdfTextOverlay({
-    super.key,
-    required this.page,
-    required this.pageRect,
-  });
+  const PdfTextOverlay({super.key, required this.page, required this.pageRect});
 
   @override
   State<PdfTextOverlay> createState() => _PdfTextOverlayState();
@@ -72,14 +68,16 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
       return const SizedBox.shrink(); // Loading text layer...
     }
 
-    if (_hasCalculatedText && (_pageText == null || _pageText!.fragments.isEmpty)) {
+    if (_hasCalculatedText &&
+        (_pageText == null || _pageText!.fragments.isEmpty)) {
       // Empty text layer or failed to extract.
       return Align(
         alignment: Alignment.bottomRight,
         child: Padding(
           padding: const EdgeInsets.all(8.0),
           child: Tooltip(
-            message: 'No text layer found on this page. Dictionary lookup unavailable.',
+            message:
+                'No text layer found on this page. Dictionary lookup unavailable.',
             child: Icon(
               Icons.warning_amber_rounded,
               size: 16,
@@ -92,41 +90,30 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
 
     if (_pageText == null) return const SizedBox.shrink();
 
-    // The scale ratio between the PDF native size and the rendered rect size.
-    final scaleX = widget.pageRect.width / widget.page.width;
-    final scaleY = widget.pageRect.height / widget.page.height;
-
     return Stack(
       children: _pageText!.fragments.map((fragment) {
-        // Calculate the bounding box for this text fragment scaled to the pageRect.
-        final left = fragment.bounds.left * scaleX;
-        final right = fragment.bounds.right * scaleX;
-        
-        // PDF coordinates origin is bottom-left, Flutter is top-left.
-        // We need to flip the Y axis: FlutterY = (PageHeight - PdfY) * scaleY
-        final top = (widget.page.height - fragment.bounds.top) * scaleY;
-        final bottom = (widget.page.height - fragment.bounds.bottom) * scaleY;
-
-        final width = (right - left).abs();
-        final height = (bottom - top).abs();
-
-        // Ensure we have a valid positive font size
-        final fontSize = height > 0 ? height * 0.9 : 1.0;
+        // Use pdfrx's toRect for correct coordinate conversion
+        // This uses uniform scaling based on height, matching the PDF viewer
+        final rect = fragment.bounds.toRect(
+          page: widget.page,
+          scaledPageSize: widget.pageRect.size,
+        );
 
         return Positioned(
-          left: left,
-          top: top - (height * 0.1), // Slight visual adjustment
-          width: width,
-          height: height * 1.2, // Give it a bit more hit area vertically
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height,
           child: FittedBox(
             fit: BoxFit.fitWidth,
+            alignment: Alignment.topLeft,
             child: TappableTextWrapper(
               showPopupDict: true,
               child: Text(
                 fragment.text,
                 style: TextStyle(
-                  fontSize: fontSize,
-                  color: Colors.transparent, // Invisible, just used for hit testing/popups
+                  fontSize: rect.height,
+                  color: Colors.transparent,
                   height: 1.0,
                 ),
               ),
