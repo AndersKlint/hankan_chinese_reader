@@ -14,6 +14,30 @@ jobs:
         with:
           channel: stable
 
+      - name: Add chinese_popup_dict dependency override
+        run: |
+          @"
+          dependency_overrides:
+            chinese_popup_dict:
+              git:
+                url: https://github.com/AndersKlint/flutter_package_chinese_popup_dict.git
+                ref: main
+          "@ | Out-File -FilePath pubspec_overrides.yaml -Encoding utf8
+
+      - name: Setup GitHub auth for private repos
+        env:
+          TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          @"
+          machine github.com
+          login x-access-token
+          password $env:TOKEN
+          "@ | Out-File -FilePath "$env:USERPROFILE\.netrc" -Encoding ascii
+          
+          # Restrict permissions (important for Git to accept it)
+          icacls "$env:USERPROFILE\.netrc" /inheritance:r
+          icacls "$env:USERPROFILE\.netrc" /grant:r "$($env:USERNAME):(R)"
+
       - run: flutter pub get
 
       - run: flutter build windows --release
@@ -21,4 +45,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-release
-          path: build/windows/x64/release/bundle
+          path: build/windows/x64/runner/Release/
