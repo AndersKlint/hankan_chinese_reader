@@ -4,6 +4,7 @@ import 'package:watch_it/watch_it.dart';
 import 'package:hankan_chinese_reader/core/service_locator.dart';
 import 'package:hankan_chinese_reader/core/services/file_service.dart';
 import 'package:hankan_chinese_reader/core/services/tab_service.dart';
+import 'package:hankan_chinese_reader/text_editor/models/text_search_result.dart';
 import 'package:hankan_chinese_reader/text_editor/services/text_editor_service.dart';
 import 'package:hankan_chinese_reader/text_editor/widgets/text_edit_view.dart';
 import 'package:hankan_chinese_reader/text_editor/widgets/text_read_view.dart';
@@ -22,17 +23,44 @@ class TextEditorScreen extends WatchingStatefulWidget {
 
 class _TextEditorScreenState extends State<TextEditorScreen> {
   late final TextEditorService _editorService;
+  late final TabService _tabService;
+  late final ScrollController _readScrollController;
+  late final ScrollController _editScrollController;
+  late final FocusNode _editFocusNode;
+
   bool _showSearch = false;
+  String _searchQuery = '';
+  List<TextSearchResult> _matches = const <TextSearchResult>[];
+  int _currentMatchIndex = -1;
+  GlobalKey? _activeMatchKey;
 
   @override
   void initState() {
     super.initState();
     _editorService = TextEditorService();
+    _tabService = getIt<TabService>();
+
+    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
+    _readScrollController = ScrollController(
+      initialScrollOffset: tab.textReadScrollOffset,
+    );
+    _editScrollController = ScrollController(
+      initialScrollOffset: tab.textEditScrollOffset,
+    );
+    _editFocusNode = FocusNode();
+    _readScrollController.addListener(_persistReadScrollOffset);
+    _editScrollController.addListener(_persistEditScrollOffset);
 
     // Initialize with tab's text content.
-    final tabService = getIt<TabService>();
-    final tab = tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
-    _editorService.initialize(tab.textContent ?? '');
+    _editorService.initialize(
+      tab.textContent ?? '',
+      isReadMode: tab.isReadMode,
+    );
+    _showSearch = tab.showTextSearch;
+    _searchQuery = tab.textSearchQuery;
+    if (_searchQuery.isNotEmpty) {
+      _recomputeSearchMatches(_editorService.content.value, _searchQuery);
+    }
 
     // Sync modified state back to tab service.
     _editorService.isModified.addListener(_onModifiedChanged);
@@ -41,7 +69,22 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
   @override
   void dispose() {
     _editorService.isModified.removeListener(_onModifiedChanged);
+    _readScrollController.removeListener(_persistReadScrollOffset);
+    _editScrollController.removeListener(_persistEditScrollOffset);
+    _readScrollController.dispose();
+    _editScrollController.dispose();
+    _editFocusNode.dispose();
     super.dispose();
+  }
+
+  void _persistReadScrollOffset() {
+    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
+    tab.textReadScrollOffset = _readScrollController.offset;
+  }
+
+  void _persistEditScrollOffset() {
+    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
+    tab.textEditScrollOffset = _editScrollController.offset;
   }
 
   void _onModifiedChanged() {
@@ -50,6 +93,154 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
       widget.tabId,
       modified: _editorService.isModified.value,
     );
+  }
+
+  void _setShowSearch(bool show) {
+    setState(() {
+      _showSearch = show;
+      if (!show) {
+        _searchQuery = '';
+        _matches = const <TextSearchResult>[];
+        _currentMatchIndex = -1;
+        _activeMatchKey = null;
+      }
+    });
+    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
+    tab.showTextSearch = show;
+    if (!show) {
+      tab.textSearchQuery = '';
+    }
+    _tabService.notifyTabStateChanged();
+  }
+
+  void _recomputeSearchMatches(String text, String query) {
+    if (query.isEmpty) {
+      setState(() {
+        _matches = const <TextSearchResult>[];
+        _currentMatchIndex = -1;
+        _activeMatchKey = null;
+      });
+      return;
+    }
+
+    final matches = <TextSearchResult>[];
+    final lowerText = text.toLowerCase();
+    final lowerQuery = query.toLowerCase();
+    int start = 0;
+    while (true) {
+      final index = lowerText.indexOf(lowerQuery, start);
+      if (index == -1) {
+        break;
+      }
+      matches.add(TextSearchResult(start: index, end: index + query.length));
+      start = index + 1;
+    }
+
+    setState(() {
+      _matches = matches;
+      _currentMatchIndex = matches.isEmpty ? -1 : 0;
+    });
+    _scrollToActiveMatch();
+  }
+
+  void _onSearchQueryChanged(String query) {
+    if (_searchQuery == query) {
+      return;
+    }
+    _searchQuery = query;
+    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
+    tab.textSearchQuery = query;
+    _tabService.notifyTabStateChanged();
+    _recomputeSearchMatches(_editorService.content.value, query);
+  }
+
+  void _nextMatch() {
+    if (_matches.isEmpty) {
+      return;
+    }
+    setState(() {
+      _currentMatchIndex = (_currentMatchIndex + 1) % _matches.length;
+    });
+    _scrollToActiveMatch();
+  }
+
+  void _previousMatch() {
+    if (_matches.isEmpty) {
+      return;
+    }
+    setState(() {
+      _currentMatchIndex =
+          (_currentMatchIndex - 1 + _matches.length) % _matches.length;
+    });
+    _scrollToActiveMatch();
+  }
+
+  String get _matchLabel {
+    if (_searchQuery.isEmpty) {
+      return '';
+    }
+    if (_matches.isEmpty) {
+      return 'No results';
+    }
+    return '${_currentMatchIndex + 1}/${_matches.length}';
+  }
+
+  TextSelection? get _activeSelection {
+    if (_currentMatchIndex < 0 || _currentMatchIndex >= _matches.length) {
+      return null;
+    }
+    final match = _matches[_currentMatchIndex];
+    return TextSelection(baseOffset: match.start, extentOffset: match.end);
+  }
+
+  void _scrollToActiveMatch() {
+    final isReadMode = _editorService.isReadMode.value;
+    if (_currentMatchIndex < 0 || _currentMatchIndex >= _matches.length) {
+      return;
+    }
+
+    if (isReadMode) {
+      _activeMatchKey = GlobalKey();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = _activeMatchKey?.currentContext;
+        if (context == null) {
+          return;
+        }
+        Scrollable.ensureVisible(
+          context,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+          alignment: 0.22,
+        );
+      });
+      setState(() {});
+      return;
+    }
+
+    final text = _editorService.content.value;
+    final target = _matches[_currentMatchIndex].start.clamp(0, text.length);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      if (!_editFocusNode.hasFocus) {
+        _editFocusNode.requestFocus();
+      }
+
+      if (_editScrollController.hasClients && text.isNotEmpty) {
+        final normalized = target / text.length;
+        final destination =
+            (normalized * _editScrollController.position.maxScrollExtent).clamp(
+              0.0,
+              _editScrollController.position.maxScrollExtent,
+            );
+        _editScrollController.animateTo(
+          destination,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   Future<void> _save() async {
@@ -87,8 +278,9 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
         ): () =>
             _editorService.redo(),
         const SingleActivator(LogicalKeyboardKey.keyS, control: true): _save,
-        const SingleActivator(LogicalKeyboardKey.keyF, control: true): () =>
-            setState(() => _showSearch = !_showSearch),
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true): () {
+          _setShowSearch(!_showSearch);
+        },
       },
       child: Focus(
         autofocus: true,
@@ -97,26 +289,41 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
             // Toolbar
             _Toolbar(
               isReadMode: isReadMode,
-              onToggleMode: _editorService.toggleReadMode,
+              onToggleMode: _toggleMode,
               onUndo: _editorService.canUndo ? _editorService.undo : null,
               onRedo: _editorService.canRedo ? _editorService.redo : null,
               onSave: _save,
-              onSearch: () => setState(() => _showSearch = !_showSearch),
+              onSearch: () => _setShowSearch(!_showSearch),
             ),
 
             // Search bar
             if (_showSearch)
               TextSearchBar(
-                text: content,
-                onClose: () => setState(() => _showSearch = false),
+                matchLabel: _matchLabel,
+                initialQuery: _searchQuery,
+                hasMatches: _matches.isNotEmpty,
+                onQueryChanged: _onSearchQueryChanged,
+                onPreviousMatch: _previousMatch,
+                onNextMatch: _nextMatch,
+                onClose: () => _setShowSearch(false),
               ),
 
             // Editor / Reader content
             Expanded(
               child: isReadMode
-                  ? TextReadView(text: content)
+                  ? TextReadView(
+                      text: content,
+                      searchQuery: _searchQuery,
+                      matches: _matches,
+                      activeMatchIndex: _currentMatchIndex,
+                      scrollController: _readScrollController,
+                      activeMatchKey: _activeMatchKey,
+                    )
                   : TextEditView(
                       initialText: content,
+                      scrollController: _editScrollController,
+                      focusNode: _editFocusNode,
+                      highlightedSelection: _activeSelection,
                       onChanged: (text) {
                         _editorService.pushUndoState();
                         _editorService.updateContent(text);
@@ -126,6 +333,9 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
                           (t) => t.id == widget.tabId,
                         );
                         tab.textContent = text;
+                        if (_searchQuery.isNotEmpty) {
+                          _recomputeSearchMatches(text, _searchQuery);
+                        }
                       },
                     ),
             ),
@@ -133,6 +343,27 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
         ),
       ),
     );
+  }
+
+  void _toggleMode() {
+    _editorService.toggleReadMode();
+    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
+    tab.isReadMode = _editorService.isReadMode.value;
+    _tabService.notifyTabStateChanged();
+    _scrollToActiveMatch();
+  }
+
+  @override
+  void didUpdateWidget(covariant TextEditorScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tabId != widget.tabId) {
+      final tab = _tabService.tabs.value.firstWhere(
+        (t) => t.id == widget.tabId,
+      );
+      _showSearch = tab.showTextSearch;
+      _searchQuery = tab.textSearchQuery;
+      _recomputeSearchMatches(_editorService.content.value, _searchQuery);
+    }
   }
 }
 

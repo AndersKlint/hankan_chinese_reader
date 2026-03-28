@@ -78,4 +78,9 @@ class TabService {
     tab.title = title;
     tabs.value = [...list];
   }
+
+  /// Triggers listeners after updating a tab's mutable fields directly.
+  void notifyTabStateChanged() {
+    tabs.value = [...tabs.value];
+  }
 }

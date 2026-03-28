@@ -12,6 +12,7 @@ class PdfToolbar extends StatelessWidget {
   final int currentPage;
   final int pageCount;
   final ValueChanged<int> onPageSubmitted;
+  final ValueChanged<String>? onSearchChanged;
 
   const PdfToolbar({
     super.key,
@@ -24,6 +25,7 @@ class PdfToolbar extends StatelessWidget {
     required this.currentPage,
     required this.pageCount,
     required this.onPageSubmitted,
+    this.onSearchChanged,
   });
 
   @override
@@ -58,6 +60,7 @@ class PdfToolbar extends StatelessWidget {
               controller: searchController,
               textSearcher: textSearcher!,
               onClose: onToggleSearch,
+              onSearchChanged: onSearchChanged,
             ),
           ] else
             IconButton(
@@ -87,11 +90,13 @@ class _SearchBar extends StatelessWidget {
   final TextEditingController controller;
   final PdfTextSearcher textSearcher;
   final VoidCallback onClose;
+  final ValueChanged<String>? onSearchChanged;
 
   const _SearchBar({
     required this.controller,
     required this.textSearcher,
     required this.onClose,
+    this.onSearchChanged,
   });
 
   @override
@@ -126,6 +131,7 @@ class _SearchBar extends StatelessWidget {
                   ),
                   onChanged: (value) {
                     textSearcher.startTextSearch(value);
+                    onSearchChanged?.call(value);
                   },
                 ),
               ),

@@ -8,10 +8,22 @@ class TextEditView extends StatefulWidget {
   /// Called when text changes.
   final ValueChanged<String> onChanged;
 
+  /// Persisted editor scroll controller.
+  final ScrollController scrollController;
+
+  /// Focus node used to reveal active search hit in view.
+  final FocusNode focusNode;
+
+  /// Current highlighted match selection.
+  final TextSelection? highlightedSelection;
+
   const TextEditView({
     super.key,
     required this.initialText,
     required this.onChanged,
+    required this.scrollController,
+    required this.focusNode,
+    this.highlightedSelection,
   });
 
   @override
@@ -36,6 +48,16 @@ class _TextEditViewState extends State<TextEditView> {
       _ignoreChange = true;
       _controller.text = widget.initialText;
       _ignoreChange = false;
+    }
+
+    final selection = widget.highlightedSelection;
+    if (selection != null && selection != _controller.selection) {
+      final maxOffset = _controller.text.length;
+      final safeSelection = TextSelection(
+        baseOffset: selection.baseOffset.clamp(0, maxOffset),
+        extentOffset: selection.extentOffset.clamp(0, maxOffset),
+      );
+      _controller.selection = safeSelection;
     }
   }
 
@@ -78,6 +100,8 @@ class _TextEditViewState extends State<TextEditView> {
                 borderRadius: BorderRadius.circular(14),
                 child: TextField(
                   controller: _controller,
+                  focusNode: widget.focusNode,
+                  scrollController: widget.scrollController,
                   maxLines: null,
                   expands: true,
                   textAlignVertical: TextAlignVertical.top,

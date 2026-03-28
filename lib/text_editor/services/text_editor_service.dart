@@ -21,10 +21,11 @@ class TextEditorService {
   static const int _maxUndoHistory = 100;
 
   /// Initializes the service with the given [text].
-  void initialize(String text) {
+  void initialize(String text, {required bool isReadMode}) {
     _savedContent = text;
     content.value = text;
     isModified.value = false;
+    this.isReadMode.value = isReadMode;
     _undoStack.clear();
     _redoStack.clear();
   }

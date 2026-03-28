@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:watch_it/watch_it.dart';
 import 'package:hankan_chinese_reader/core/models/tab_model.dart';
 import 'package:hankan_chinese_reader/core/service_locator.dart';
 import 'package:hankan_chinese_reader/core/services/file_service.dart';
@@ -9,59 +8,74 @@ import 'package:hankan_chinese_reader/text_editor/screens/text_editor_screen.dar
 import 'package:hankan_chinese_reader/pdf_reader/screens/pdf_reader_screen.dart';
 
 /// The main shell screen with tab bar and content area.
-class HomeScreen extends StatelessWidget with WatchItMixin {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final Map<String, Widget> _tabBodies = <String, Widget>{};
 
   @override
   Widget build(BuildContext context) {
     final tabService = getIt<TabService>();
     final themeService = getIt<ThemeService>();
-    final tabs = watchValue<TabService, List<TabModel>>((s) => s.tabs);
-    final activeIndex = watchValue<TabService, int>((s) => s.activeIndex);
 
     return ListenableBuilder(
       listenable: themeService,
       builder: (context, _) {
         final themeMode = themeService.value;
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Hankan Chinese Reader'),
-            actions: [
-              IconButton(
-                icon: Icon(
-                  themeMode == ThemeMode.dark
-                      ? Icons.light_mode_outlined
-                      : Icons.dark_mode_outlined,
-                ),
-                tooltip: themeMode == ThemeMode.dark
-                    ? 'Switch to light mode'
-                    : 'Switch to dark mode',
-                onPressed: () => themeService.toggleTheme(),
-              ),
-              IconButton(
-                icon: const Icon(Icons.note_add_outlined),
-                tooltip: 'New text document',
-                onPressed: () => _createNewDocument(tabService),
-              ),
-              IconButton(
-                icon: const Icon(Icons.folder_open_outlined),
-                tooltip: 'Open file',
-                onPressed: () => _openFile(context, tabService),
-              ),
-            ],
-            bottom: tabs.isEmpty
-                ? null
-                : PreferredSize(
-                    preferredSize: const Size.fromHeight(40),
-                    child: _TabBar(
-                      tabs: tabs,
-                      activeIndex: activeIndex,
-                      onSelect: tabService.setActiveTab,
-                      onClose: tabService.closeTab,
-                    ),
+        return ValueListenableBuilder<List<TabModel>>(
+          valueListenable: tabService.tabs,
+          builder: (context, tabs, _) {
+            return ValueListenableBuilder<int>(
+              valueListenable: tabService.activeIndex,
+              builder: (context, activeIndex, __) {
+                return Scaffold(
+                  appBar: AppBar(
+                    title: const Text('Hankan Chinese Reader'),
+                    actions: [
+                      IconButton(
+                        icon: Icon(
+                          themeMode == ThemeMode.dark
+                              ? Icons.light_mode_outlined
+                              : Icons.dark_mode_outlined,
+                        ),
+                        tooltip: themeMode == ThemeMode.dark
+                            ? 'Switch to light mode'
+                            : 'Switch to dark mode',
+                        onPressed: () => themeService.toggleTheme(),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.note_add_outlined),
+                        tooltip: 'New text document',
+                        onPressed: () => _createNewDocument(tabService),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.folder_open_outlined),
+                        tooltip: 'Open file',
+                        onPressed: () => _openFile(context, tabService),
+                      ),
+                    ],
+                    bottom: tabs.isEmpty
+                        ? null
+                        : PreferredSize(
+                            preferredSize: const Size.fromHeight(40),
+                            child: _TabBar(
+                              tabs: tabs,
+                              activeIndex: activeIndex,
+                              onSelect: tabService.setActiveTab,
+                              onClose: tabService.closeTab,
+                            ),
+                          ),
                   ),
-          ),
-          body: _buildBody(tabs, activeIndex),
+                  body: _buildBody(tabs, activeIndex),
+                );
+              },
+            );
+          },
         );
       },
     );
@@ -75,15 +89,30 @@ class HomeScreen extends StatelessWidget with WatchItMixin {
       return const SizedBox.shrink();
     }
 
-    final tab = tabs[activeIndex];
+    final activeTab = tabs[activeIndex];
+    final liveIds = tabs.map((t) => t.id).toSet();
+    _tabBodies.removeWhere((id, _) => !liveIds.contains(id));
+    for (final tab in tabs) {
+      _tabBodies.putIfAbsent(tab.id, () {
+        return switch (tab.type) {
+          DocumentType.text => TextEditorScreen(tabId: tab.id),
+          DocumentType.pdf => PdfReaderScreen(tabId: tab.id),
+        };
+      });
+    }
 
-    // Use a keyed widget so state is preserved per tab.
-    return KeyedSubtree(
-      key: ValueKey(tab.id),
-      child: switch (tab.type) {
-        DocumentType.text => TextEditorScreen(tabId: tab.id),
-        DocumentType.pdf => PdfReaderScreen(tabId: tab.id),
-      },
+    return Stack(
+      children: tabs
+          .map(
+            (tab) => Offstage(
+              offstage: tab.id != activeTab.id,
+              child: KeyedSubtree(
+                key: ValueKey(tab.id),
+                child: _tabBodies[tab.id]!,
+              ),
+            ),
+          )
+          .toList(growable: false),
     );
   }
 

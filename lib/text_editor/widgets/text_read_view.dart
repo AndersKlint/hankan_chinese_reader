@@ -1,12 +1,95 @@
 import 'package:chinese_popup_dict/chinese_popup_dict.dart';
 import 'package:flutter/material.dart';
+import 'package:hankan_chinese_reader/text_editor/models/text_search_result.dart';
 
 /// Read-only text view with the popup dictionary active.
 class TextReadView extends StatelessWidget {
   /// The text content to display.
   final String text;
 
-  const TextReadView({super.key, required this.text});
+  /// Current search query.
+  final String searchQuery;
+
+  /// All search matches.
+  final List<TextSearchResult> matches;
+
+  /// Active match index in [matches], or -1 when none.
+  final int activeMatchIndex;
+
+  /// Scroll controller from parent for state persistence and jump-to-match.
+  final ScrollController scrollController;
+
+  /// Key of the active match to scroll into view.
+  final GlobalKey? activeMatchKey;
+
+  const TextReadView({
+    super.key,
+    required this.text,
+    required this.searchQuery,
+    required this.matches,
+    required this.activeMatchIndex,
+    required this.scrollController,
+    this.activeMatchKey,
+  });
+
+  List<InlineSpan> _buildHighlightedSpans(BuildContext context) {
+    final spans = <InlineSpan>[];
+    final baseStyle = Theme.of(
+      context,
+    ).textTheme.bodyLarge?.copyWith(fontSize: 20, height: 2.0);
+
+    if (searchQuery.isEmpty || matches.isEmpty) {
+      spans.add(TextSpan(text: text, style: baseStyle));
+      return spans;
+    }
+
+    int cursor = 0;
+    for (int i = 0; i < matches.length; i++) {
+      final match = matches[i];
+      if (match.start > cursor) {
+        spans.add(
+          TextSpan(text: text.substring(cursor, match.start), style: baseStyle),
+        );
+      }
+
+      final isActive = i == activeMatchIndex;
+      final highlightColor = isActive
+          ? Theme.of(context).colorScheme.primaryContainer
+          : Theme.of(context).colorScheme.secondaryContainer;
+      final matchText = text.substring(match.start, match.end);
+      if (isActive && activeMatchKey != null) {
+        spans.add(
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: Container(
+              key: activeMatchKey,
+              decoration: BoxDecoration(
+                color: highlightColor,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(matchText, style: baseStyle),
+            ),
+          ),
+        );
+      } else {
+        spans.add(
+          TextSpan(
+            text: matchText,
+            style: baseStyle?.copyWith(backgroundColor: highlightColor),
+          ),
+        );
+      }
+
+      cursor = match.end;
+    }
+
+    if (cursor < text.length) {
+      spans.add(TextSpan(text: text.substring(cursor), style: baseStyle));
+    }
+
+    return spans;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +123,7 @@ class TextReadView extends StatelessWidget {
         return ColoredBox(
           color: backgroundSurface,
           child: SingleChildScrollView(
+            controller: scrollController,
             padding: EdgeInsets.fromLTRB(sidePadding, 16, sidePadding, 16),
             child: Container(
               width: double.infinity,
@@ -51,11 +135,8 @@ class TextReadView extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               child: TappableTextWrapper(
                 showPopupDict: true,
-                child: Text(
-                  text,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyLarge?.copyWith(fontSize: 20, height: 2.0),
+                child: Text.rich(
+                  TextSpan(children: _buildHighlightedSpans(context)),
                 ),
               ),
             ),

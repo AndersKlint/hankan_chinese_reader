@@ -27,6 +27,33 @@ class TabModel {
   /// For text documents, the current text content.
   String? textContent;
 
+  /// For text documents, whether read mode is enabled.
+  bool isReadMode;
+
+  /// For text documents, whether search bar is visible.
+  bool showTextSearch;
+
+  /// For text documents, current search query.
+  String textSearchQuery;
+
+  /// For text documents, read mode scroll offset.
+  double textReadScrollOffset;
+
+  /// For text documents, edit mode scroll offset.
+  double textEditScrollOffset;
+
+  /// For PDFs, current page number.
+  int pdfCurrentPage;
+
+  /// For PDFs, whether thumbnails sidebar is visible.
+  bool showPdfThumbnails;
+
+  /// For PDFs, whether search bar is visible.
+  bool showPdfSearch;
+
+  /// For PDFs, current search query.
+  String pdfSearchQuery;
+
   TabModel({
     required this.id,
     required this.title,
@@ -34,5 +61,14 @@ class TabModel {
     this.filePath,
     this.isModified = false,
     this.textContent,
+    this.isReadMode = false,
+    this.showTextSearch = false,
+    this.textSearchQuery = '',
+    this.textReadScrollOffset = 0,
+    this.textEditScrollOffset = 0,
+    this.pdfCurrentPage = 1,
+    this.showPdfThumbnails = false,
+    this.showPdfSearch = false,
+    this.pdfSearchQuery = '',
   });
 }

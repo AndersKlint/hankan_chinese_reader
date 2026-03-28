@@ -22,6 +22,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   PdfTextSearcher? _textSearcher;
   final Object _pdfTapSourceId = Object();
   final Map<int, PdfPageText> _loadedPageTextByNumber = <int, PdfPageText>{};
+  late final TabService _tabService;
 
   String? _filePath;
   int _currentPage = 1;
@@ -34,9 +35,13 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   @override
   void initState() {
     super.initState();
-    final tabService = getIt<TabService>();
-    final tab = tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
+    _tabService = getIt<TabService>();
+    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
     _filePath = tab.filePath;
+    _currentPage = tab.pdfCurrentPage;
+    _showThumbnails = tab.showPdfThumbnails;
+    _showSearchBar = tab.showPdfSearch;
+    _searchController.text = tab.pdfSearchQuery;
 
     _pdfController.addListener(_onPdfStateChanged);
   }
@@ -57,6 +62,10 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
       final pageNumber = _pdfController.pageNumber;
       if (pageNumber != null && _currentPage != pageNumber) {
         setState(() => _currentPage = pageNumber);
+        final tab = _tabService.tabs.value.firstWhere(
+          (t) => t.id == widget.tabId,
+        );
+        tab.pdfCurrentPage = pageNumber;
       }
     }
   }
@@ -64,6 +73,10 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   void _jumpToPage(int pageNumber) {
     if (pageNumber > 0 && pageNumber <= _pageCount) {
       _pdfController.goToPage(pageNumber: pageNumber);
+      final tab = _tabService.tabs.value.firstWhere(
+        (t) => t.id == widget.tabId,
+      );
+      tab.pdfCurrentPage = pageNumber;
     }
   }
 
@@ -186,6 +199,11 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
         _textSearcher?.resetTextSearch();
       }
     });
+
+    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
+    tab.showPdfSearch = _showSearchBar;
+    tab.pdfSearchQuery = _showSearchBar ? _searchController.text : '';
+    _tabService.notifyTabStateChanged();
   }
 
   @override
@@ -199,8 +217,14 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
         // Top Toolbar
         PdfToolbar(
           showThumbnails: _showThumbnails,
-          onToggleThumbnails: () =>
-              setState(() => _showThumbnails = !_showThumbnails),
+          onToggleThumbnails: () {
+            setState(() => _showThumbnails = !_showThumbnails);
+            final tab = _tabService.tabs.value.firstWhere(
+              (t) => t.id == widget.tabId,
+            );
+            tab.showPdfThumbnails = _showThumbnails;
+            _tabService.notifyTabStateChanged();
+          },
           showSearchBar: _showSearchBar,
           onToggleSearch: _toggleSearch,
           searchController: _searchController,
@@ -208,6 +232,12 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
           currentPage: _currentPage,
           pageCount: _pageCount,
           onPageSubmitted: _jumpToPage,
+          onSearchChanged: (value) {
+            final tab = _tabService.tabs.value.firstWhere(
+              (t) => t.id == widget.tabId,
+            );
+            tab.pdfSearchQuery = value;
+          },
         ),
         Expanded(
           child: Row(
@@ -232,10 +262,31 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                       setState(() {
                         _textSearcher = PdfTextSearcher(_pdfController);
                       });
+
+                      final tab = _tabService.tabs.value.firstWhere(
+                        (t) => t.id == widget.tabId,
+                      );
+                      final targetPage = tab.pdfCurrentPage.clamp(
+                        1,
+                        document.pages.length,
+                      );
+                      if (targetPage != 1) {
+                        _pdfController.goToPage(
+                          pageNumber: targetPage,
+                          duration: Duration.zero,
+                        );
+                      }
+                      if (_showSearchBar && tab.pdfSearchQuery.isNotEmpty) {
+                        _textSearcher?.startTextSearch(tab.pdfSearchQuery);
+                      }
                     },
                     onPageChanged: (pageNumber) {
                       if (pageNumber != null && pageNumber != _currentPage) {
                         setState(() => _currentPage = pageNumber);
+                        final tab = _tabService.tabs.value.firstWhere(
+                          (t) => t.id == widget.tabId,
+                        );
+                        tab.pdfCurrentPage = pageNumber;
                       }
                     },
                     onGeneralTap: _handlePdfTap,
