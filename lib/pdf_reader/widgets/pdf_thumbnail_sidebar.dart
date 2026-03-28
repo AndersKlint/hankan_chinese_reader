@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 /// Left sidebar showing page thumbnails for quick navigation.
-class PdfThumbnailSidebar extends StatelessWidget {
+class PdfThumbnailSidebar extends StatefulWidget {
   /// Path to the PDF file.
   final String filePath;
 
@@ -24,11 +24,59 @@ class PdfThumbnailSidebar extends StatelessWidget {
   });
 
   @override
+  State<PdfThumbnailSidebar> createState() => _PdfThumbnailSidebarState();
+}
+
+class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
+  static const double _itemExtent = 196;
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToCurrentPage());
+  }
+
+  @override
+  void didUpdateWidget(covariant PdfThumbnailSidebar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentPage != widget.currentPage) {
+      _scrollToCurrentPage();
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToCurrentPage() {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+
+    final targetOffset =
+        ((widget.currentPage - 1) * _itemExtent) -
+        ((_scrollController.position.viewportDimension - _itemExtent) / 2);
+    final clampedOffset = targetOffset.clamp(
+      0.0,
+      _scrollController.position.maxScrollExtent,
+    );
+
+    _scrollController.animateTo(
+      clampedOffset,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
-      width: width,
+      width: widget.width,
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow,
         border: Border(
@@ -36,7 +84,7 @@ class PdfThumbnailSidebar extends StatelessWidget {
         ),
       ),
       child: PdfDocumentViewBuilder.file(
-        filePath,
+        widget.filePath,
         builder: (context, document) {
           if (document == null) {
             return const Center(
@@ -49,14 +97,16 @@ class PdfThumbnailSidebar extends StatelessWidget {
           }
 
           return ListView.builder(
+            controller: _scrollController,
             padding: const EdgeInsets.symmetric(vertical: 8),
+            itemExtent: _itemExtent,
             itemCount: document.pages.length,
             itemBuilder: (context, index) {
               final pageNumber = index + 1;
-              final isActive = pageNumber == currentPage;
+              final isActive = pageNumber == widget.currentPage;
 
               return GestureDetector(
-                onTap: () => onPageTapped(pageNumber),
+                onTap: () => widget.onPageTapped(pageNumber),
                 child: Container(
                   margin: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -73,8 +123,7 @@ class PdfThumbnailSidebar extends StatelessWidget {
                   ),
                   child: Column(
                     children: [
-                      SizedBox(
-                        height: 180,
+                      Expanded(
                         child: PdfPageView(
                           document: document,
                           pageNumber: pageNumber,
@@ -83,7 +132,7 @@ class PdfThumbnailSidebar extends StatelessWidget {
                         ),
                       ),
                       Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        padding: const EdgeInsets.fromLTRB(0, 2, 0, 4),
                         child: Text(
                           '$pageNumber',
                           style: Theme.of(context).textTheme.labelSmall

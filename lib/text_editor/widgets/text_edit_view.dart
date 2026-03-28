@@ -48,33 +48,72 @@ class _TextEditViewState extends State<TextEditView> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isDark = colorScheme.brightness == Brightness.dark;
+    final textTheme = Theme.of(context).textTheme;
 
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: TextField(
-        controller: _controller,
-        maxLines: null,
-        expands: true,
-        textAlignVertical: TextAlignVertical.top,
-        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-          fontSize: 18,
-          height: 1.8,
-          color: isDark ? const Color(0xFFE8E8E8) : Colors.black,
-        ),
-        decoration: InputDecoration(
-          border: InputBorder.none,
-          hintText: 'Enter Chinese text here...',
-          contentPadding: const EdgeInsets.all(16),
-          filled: true,
-          fillColor: isDark ? const Color(0xFF3A3A3C) : const Color(0xFFF0F0F0),
-        ),
-        onChanged: (text) {
-          if (!_ignoreChange) {
-            widget.onChanged(text);
-          }
-        },
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final sidePadding = constraints.maxWidth > 900
+            ? ((constraints.maxWidth - 860) / 2).clamp(24.0, 220.0)
+            : 16.0;
+
+        final isDark = colorScheme.brightness == Brightness.dark;
+        final backgroundSurface = isDark
+            ? colorScheme.surfaceContainerLowest
+            : colorScheme.surfaceContainerLow;
+        final editorSurface = isDark
+            ? colorScheme.surfaceContainerLow
+            : colorScheme.surface;
+
+        return ColoredBox(
+          color: backgroundSurface,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(sidePadding, 16, sidePadding, 16),
+            child: Container(
+              decoration: BoxDecoration(
+                color: editorSurface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: colorScheme.outlineVariant),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: TextField(
+                  controller: _controller,
+                  maxLines: null,
+                  expands: true,
+                  textAlignVertical: TextAlignVertical.top,
+                  cursorColor: colorScheme.primary,
+                  style: textTheme.bodyLarge?.copyWith(
+                    fontSize: 18,
+                    height: 1.8,
+                  ),
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                    hintText: 'Enter Chinese text here...',
+                    hintStyle: textTheme.bodyLarge?.copyWith(
+                      fontSize: 18,
+                      height: 1.8,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    contentPadding: const EdgeInsets.all(20),
+                    filled: true,
+                    fillColor: editorSurface,
+                    hoverColor: editorSurface,
+                    focusColor: editorSurface,
+                  ),
+                  onChanged: (text) {
+                    if (!_ignoreChange) {
+                      widget.onChanged(text);
+                    }
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

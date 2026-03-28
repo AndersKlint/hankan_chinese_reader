@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
+import 'package:chinese_popup_dict/chinese_popup_dict.dart';
 import 'package:hankan_chinese_reader/core/service_locator.dart';
 import 'package:hankan_chinese_reader/core/services/tab_service.dart';
 import 'package:hankan_chinese_reader/pdf_reader/widgets/pdf_text_overlay.dart';
@@ -19,6 +20,8 @@ class PdfReaderScreen extends StatefulWidget {
 class _PdfReaderScreenState extends State<PdfReaderScreen> {
   final PdfViewerController _pdfController = PdfViewerController();
   PdfTextSearcher? _textSearcher;
+  final Object _pdfTapSourceId = Object();
+  final Map<int, PdfPageText> _loadedPageTextByNumber = <int, PdfPageText>{};
 
   String? _filePath;
   int _currentPage = 1;
@@ -64,6 +67,117 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
     }
   }
 
+  void _onPageTextLoaded(int pageNumber, PdfPageText? text) {
+    if (text == null) {
+      _loadedPageTextByNumber.remove(pageNumber);
+      return;
+    }
+    _loadedPageTextByNumber[pageNumber] = text;
+  }
+
+  bool _handlePdfTap(
+    BuildContext context,
+    PdfViewerController controller,
+    PdfViewerGeneralTapHandlerDetails details,
+  ) {
+    if (details.type != PdfViewerGeneralTapType.tap ||
+        details.tapOn == PdfViewerPart.background ||
+        !controller.isReady) {
+      return false;
+    }
+
+    int? pageNumber;
+    final layouts = controller.layout.pageLayouts;
+    for (int i = 0; i < layouts.length; i++) {
+      if (layouts[i].inflate(2).contains(details.documentPosition)) {
+        pageNumber = i + 1;
+        break;
+      }
+    }
+
+    pageNumber ??= controller.pageNumber;
+    if (pageNumber == null) {
+      return false;
+    }
+
+    final pageText = _loadedPageTextByNumber[pageNumber];
+    if (pageText == null ||
+        pageText.fullText.isEmpty ||
+        pageText.charRects.isEmpty) {
+      return false;
+    }
+
+    final documentPosition = details.documentPosition;
+    final pageRect = layouts[pageNumber - 1];
+    if (!pageRect.inflate(2).contains(documentPosition)) {
+      return false;
+    }
+
+    final page = controller.pages[pageNumber - 1];
+    final localPointInPage = Offset(
+      documentPosition.dx - pageRect.left,
+      documentPosition.dy - pageRect.top,
+    );
+    final pdfPoint = localPointInPage.toPdfPoint(
+      page: page,
+      scaledPageSize: pageRect.size,
+    );
+
+    const hitTolerance = 1.0;
+    int? charIndex;
+    for (int i = 0; i < pageText.charRects.length; i++) {
+      final charRect = pageText.charRects[i];
+      if (charRect.containsXy(pdfPoint.x, pdfPoint.y, margin: hitTolerance)) {
+        charIndex = i;
+        break;
+      }
+    }
+
+    if (charIndex == null) {
+      const maxDistanceSquared = 20.0;
+      double bestDistance = maxDistanceSquared;
+      for (int i = 0; i < pageText.charRects.length; i++) {
+        final distance = pageText.charRects[i].distanceSquaredTo(pdfPoint);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          charIndex = i;
+        }
+      }
+    }
+
+    if (charIndex == null) {
+      return false;
+    }
+
+    final char = pageText.fullText[charIndex];
+    final rune = char.runes.first;
+    final isCjkChar = rune >= 0x3400 && rune <= 0x9FFF;
+    if (!isCjkChar) {
+      return false;
+    }
+
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox) {
+      return false;
+    }
+    final globalCenter = renderObject.localToGlobal(details.localPosition);
+    final globalRect = Rect.fromCenter(
+      center: globalCenter,
+      width: 2,
+      height: 2,
+    );
+
+    PopupDictService.instance.showPopupDict(
+      context,
+      char,
+      charIndex,
+      globalRect,
+      pageText.fullText,
+      sourceId: _pdfTapSourceId,
+    );
+    return true;
+  }
+
   void _toggleSearch() {
     setState(() {
       _showSearchBar = !_showSearchBar;
@@ -79,8 +193,6 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
     if (_filePath == null) {
       return const Center(child: Text('No PDF file specified.'));
     }
-
-    final colorScheme = Theme.of(context).colorScheme;
 
     return Column(
       children: [
@@ -114,43 +226,50 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                   _filePath!,
                   controller: _pdfController,
                   params: PdfViewerParams(
+                    scrollPhysics: const ClampingScrollPhysics(),
+                    scrollByMouseWheel: 1,
                     onViewerReady: (document, controller) {
                       setState(() {
                         _textSearcher = PdfTextSearcher(_pdfController);
                       });
                     },
-                    // Disable pdfrx's built-in text selection; our PdfTextOverlay
-                    // handles text interaction with popup dictionary support.
+                    onPageChanged: (pageNumber) {
+                      if (pageNumber != null && pageNumber != _currentPage) {
+                        setState(() => _currentPage = pageNumber);
+                      }
+                    },
+                    onGeneralTap: _handlePdfTap,
+                    // Keep the original text layer selectable for copy/search while
+                    // our overlay only handles taps for popup dictionary.
                     textSelectionParams: const PdfTextSelectionParams(
-                      enabled: false,
+                      enabled: true,
                     ),
                     pageOverlaysBuilder: (context, pageRect, page) {
-                      return [PdfTextOverlay(page: page, pageRect: pageRect)];
+                      return [
+                        PdfTextOverlay(
+                          page: page,
+                          pageRect: pageRect,
+                          sourceId: _pdfTapSourceId,
+                          onTextLoaded: _onPageTextLoaded,
+                        ),
+                      ];
                     },
                     // Add vertical scrollbar
                     viewerOverlayBuilder: (context, size, handleLinkTap) => [
                       PdfViewerScrollThumb(
                         controller: _pdfController,
                         orientation: ScrollbarOrientation.right,
+                        margin: 6,
+                        thumbSize: const Size(10, 64),
                         thumbBuilder:
                             (context, thumbSize, pageNumber, controller) {
-                              return Container(
+                              return DecoratedBox(
                                 decoration: BoxDecoration(
-                                  color: colorScheme.primary.withValues(
-                                    alpha: 0.8,
-                                  ),
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.primary.withValues(alpha: 0.75),
                                   borderRadius: BorderRadius.circular(
                                     thumbSize.width / 2,
-                                  ),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    pageNumber?.toString() ?? '',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
                                   ),
                                 ),
                               );
