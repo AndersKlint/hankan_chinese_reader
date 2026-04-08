@@ -2,20 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:chinese_popup_dict/chinese_popup_dict.dart';
 
-/// Overlays TappableTextWrapper widgets on top of PDF text fragments.
+/// Overlays tappable dictionary lookups on top of PDF text fragments.
 class PdfTextOverlay extends StatefulWidget {
   final PdfPage page;
   final Rect pageRect;
-  final Object sourceId;
-  final void Function(int pageNumber, PdfPageText? text)? onTextLoaded;
 
-  const PdfTextOverlay({
-    super.key,
-    required this.page,
-    required this.pageRect,
-    required this.sourceId,
-    this.onTextLoaded,
-  });
+  const PdfTextOverlay({super.key, required this.page, required this.pageRect});
 
   @override
   State<PdfTextOverlay> createState() => _PdfTextOverlayState();
@@ -59,7 +51,6 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
           _isLoading = false;
           _hasCalculatedText = true;
         });
-        widget.onTextLoaded?.call(pageNumber, text);
       }
     } catch (e) {
       if (mounted && _loadingPageNumber == pageNumber) {
@@ -67,7 +58,6 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
           _isLoading = false;
           _hasCalculatedText = true;
         });
-        widget.onTextLoaded?.call(pageNumber, null);
       }
     }
   }
@@ -119,30 +109,26 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
           child: FittedBox(
             fit: BoxFit.fill,
             alignment: Alignment.topLeft,
-            child: IgnorePointer(
-              child: TappableTextWrapper(
-                enableSelection: false,
-                showPopupDict: false,
-                sourceId: widget.sourceId,
-                lookupText: _pageText!.fullText,
-                lookupTextOffset: fragment.index,
-                child: Text(
-                  fragment.text,
-                  maxLines: 1,
-                  softWrap: false,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    color: Colors.transparent,
-                    height: 1.0,
-                    leadingDistribution: TextLeadingDistribution.even,
-                  ),
-                  strutStyle: const StrutStyle(
-                    fontSize: 20,
-                    forceStrutHeight: true,
-                    height: 1.0,
-                    leading: 0,
-                    leadingDistribution: TextLeadingDistribution.even,
-                  ),
+            child: ChinesePopupDict(
+              enableSelection: false,
+              contextText: _pageText!.fullText,
+              contextOffset: fragment.index,
+              text: Text(
+                fragment.text,
+                maxLines: 1,
+                softWrap: false,
+                style: const TextStyle(
+                  fontSize: 20,
+                  color: Colors.transparent,
+                  height: 1.0,
+                  leadingDistribution: TextLeadingDistribution.even,
+                ),
+                strutStyle: const StrutStyle(
+                  fontSize: 20,
+                  forceStrutHeight: true,
+                  height: 1.0,
+                  leading: 0,
+                  leadingDistribution: TextLeadingDistribution.even,
                 ),
               ),
             ),

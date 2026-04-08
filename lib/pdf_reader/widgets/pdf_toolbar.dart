@@ -33,7 +33,7 @@ class PdfToolbar extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
-      height: 44,
+      height: 40,
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHigh,
         border: Border(
@@ -46,10 +46,11 @@ class PdfToolbar extends StatelessWidget {
           IconButton(
             icon: Icon(
               showThumbnails ? Icons.view_sidebar : Icons.view_sidebar_outlined,
-              size: 20,
+              size: 18,
             ),
             tooltip: 'Toggle page thumbnails',
             onPressed: onToggleThumbnails,
+            visualDensity: VisualDensity.compact,
           ),
 
           const VerticalDivider(width: 1, indent: 8, endIndent: 8),
@@ -64,9 +65,10 @@ class PdfToolbar extends StatelessWidget {
             ),
           ] else
             IconButton(
-              icon: const Icon(Icons.search, size: 20),
+              icon: const Icon(Icons.search, size: 18),
               tooltip: 'Search in document (Ctrl+F)',
               onPressed: textSearcher != null ? onToggleSearch : null,
+              visualDensity: VisualDensity.compact,
             ),
 
           const Spacer(),
@@ -78,7 +80,7 @@ class PdfToolbar extends StatelessWidget {
             onPageSubmitted: onPageSubmitted,
           ),
 
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
         ],
       ),
     );
@@ -105,12 +107,12 @@ class _SearchBar extends StatelessWidget {
 
     return Expanded(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         child: Row(
           children: [
             Expanded(
               child: SizedBox(
-                height: 32,
+                height: 30,
                 child: TextField(
                   controller: controller,
                   style: Theme.of(context).textTheme.bodySmall,
@@ -136,7 +138,7 @@ class _SearchBar extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 2),
             // Match count indicator
             ListenableBuilder(
               listenable: textSearcher,
@@ -161,13 +163,13 @@ class _SearchBar extends StatelessWidget {
               },
             ),
             IconButton(
-              icon: const Icon(Icons.keyboard_arrow_up, size: 20),
+              icon: const Icon(Icons.keyboard_arrow_up, size: 18),
               tooltip: 'Previous match',
               onPressed: () => textSearcher.goToPrevMatch(),
               visualDensity: VisualDensity.compact,
             ),
             IconButton(
-              icon: const Icon(Icons.keyboard_arrow_down, size: 20),
+              icon: const Icon(Icons.keyboard_arrow_down, size: 18),
               tooltip: 'Next match',
               onPressed: () => textSearcher.goToNextMatch(),
               visualDensity: VisualDensity.compact,
@@ -254,7 +256,7 @@ class _PageInputState extends State<_PageInput> {
         children: [
           SizedBox(
             width: 48,
-            height: 28,
+            height: 26,
             child: TextField(
               controller: _controller,
               focusNode: _focusNode,

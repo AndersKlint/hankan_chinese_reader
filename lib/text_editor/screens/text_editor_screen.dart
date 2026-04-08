@@ -390,8 +390,8 @@ class _Toolbar extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
-      height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow,
         border: Border(
@@ -408,6 +408,10 @@ class _Toolbar extends StatelessWidget {
             ),
             label: Text(isReadMode ? 'Edit' : 'Read'),
             onPressed: onToggleMode,
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+            ),
           ),
           const VerticalDivider(indent: 10, endIndent: 10),
 
@@ -416,13 +420,15 @@ class _Toolbar extends StatelessWidget {
               icon: const Icon(Icons.undo),
               tooltip: 'Undo (Ctrl+Z)',
               onPressed: onUndo,
-              iconSize: 20,
+              iconSize: 18,
+              visualDensity: VisualDensity.compact,
             ),
             IconButton(
               icon: const Icon(Icons.redo),
               tooltip: 'Redo (Ctrl+Shift+Z)',
               onPressed: onRedo,
-              iconSize: 20,
+              iconSize: 18,
+              visualDensity: VisualDensity.compact,
             ),
             const VerticalDivider(indent: 10, endIndent: 10),
           ],
@@ -431,13 +437,15 @@ class _Toolbar extends StatelessWidget {
             icon: const Icon(Icons.search),
             tooltip: 'Search (Ctrl+F)',
             onPressed: onSearch,
-            iconSize: 20,
+            iconSize: 18,
+            visualDensity: VisualDensity.compact,
           ),
           IconButton(
             icon: const Icon(Icons.save_outlined),
             tooltip: 'Save (Ctrl+S)',
             onPressed: onSave,
-            iconSize: 20,
+            iconSize: 18,
+            visualDensity: VisualDensity.compact,
           ),
 
           const Spacer(),

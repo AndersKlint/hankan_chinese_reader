@@ -133,9 +133,8 @@ class TextReadView extends StatelessWidget {
                 border: Border.all(color: colorScheme.outlineVariant),
               ),
               padding: const EdgeInsets.all(20),
-              child: TappableTextWrapper(
-                showPopupDict: true,
-                child: Text.rich(
+              child: ChinesePopupDict(
+                text: Text.rich(
                   TextSpan(children: _buildHighlightedSpans(context)),
                 ),
               ),

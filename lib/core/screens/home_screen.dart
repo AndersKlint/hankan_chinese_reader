@@ -32,10 +32,19 @@ class _HomeScreenState extends State<HomeScreen> {
           builder: (context, tabs, _) {
             return ValueListenableBuilder<int>(
               valueListenable: tabService.activeIndex,
-              builder: (context, activeIndex, __) {
+              builder: (context, activeIndex, _) {
                 return Scaffold(
                   appBar: AppBar(
-                    title: const Text('Hankan Chinese Reader'),
+                    toolbarHeight: 46,
+                    titleSpacing: 8,
+                    title: tabs.isEmpty
+                        ? null
+                        : _TabBar(
+                            tabs: tabs,
+                            activeIndex: activeIndex,
+                            onSelect: tabService.setActiveTab,
+                            onClose: tabService.closeTab,
+                          ),
                     actions: [
                       IconButton(
                         icon: Icon(
@@ -43,6 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ? Icons.light_mode_outlined
                               : Icons.dark_mode_outlined,
                         ),
+                        visualDensity: VisualDensity.compact,
                         tooltip: themeMode == ThemeMode.dark
                             ? 'Switch to light mode'
                             : 'Switch to dark mode',
@@ -50,26 +60,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.note_add_outlined),
+                        visualDensity: VisualDensity.compact,
                         tooltip: 'New text document',
                         onPressed: () => _createNewDocument(tabService),
                       ),
                       IconButton(
                         icon: const Icon(Icons.folder_open_outlined),
+                        visualDensity: VisualDensity.compact,
                         tooltip: 'Open file',
                         onPressed: () => _openFile(context, tabService),
                       ),
                     ],
-                    bottom: tabs.isEmpty
-                        ? null
-                        : PreferredSize(
-                            preferredSize: const Size.fromHeight(40),
-                            child: _TabBar(
-                              tabs: tabs,
-                              activeIndex: activeIndex,
-                              onSelect: tabService.setActiveTab,
-                              onClose: tabService.closeTab,
-                            ),
-                          ),
                   ),
                   body: _buildBody(tabs, activeIndex),
                 );
@@ -176,64 +177,90 @@ class _TabBar extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return SizedBox(
-      height: 40,
+      height: 46,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: tabs.length,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
         itemBuilder: (context, index) {
           final tab = tabs[index];
           final isActive = index == activeIndex;
 
           return GestureDetector(
             onTap: () => onSelect(index),
-            child: Container(
-              margin: const EdgeInsets.only(right: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? colorScheme.primaryContainer.withValues(alpha: 0.5)
-                    : Colors.transparent,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(8),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    tab.type == DocumentType.pdf
-                        ? Icons.picture_as_pdf_outlined
-                        : Icons.description_outlined,
-                    size: 16,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Align(
+                alignment: Alignment.bottomLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${tab.title}${tab.isModified ? ' •' : ''}',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: isActive
-                          ? FontWeight.w600
-                          : FontWeight.normal,
-                      color: isActive
-                          ? colorScheme.primary
-                          : colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: () => onClose(index),
-                    child: Padding(
-                      padding: const EdgeInsets.all(2),
-                      child: Icon(
-                        Icons.close,
-                        size: 14,
-                        color: colorScheme.onSurfaceVariant,
+                  decoration: BoxDecoration(
+                    color: isActive
+                        ? colorScheme.primaryContainer.withValues(alpha: 0.5)
+                        : Colors.transparent,
+                    border: Border(
+                      top: BorderSide(
+                        color: colorScheme.outlineVariant.withValues(
+                          alpha: 0.8,
+                        ),
+                      ),
+                      left: BorderSide(
+                        color: colorScheme.outlineVariant.withValues(
+                          alpha: 0.8,
+                        ),
+                      ),
+                      right: BorderSide(
+                        color: colorScheme.outlineVariant.withValues(
+                          alpha: 0.8,
+                        ),
                       ),
                     ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(8),
+                      topRight: Radius.circular(8),
+                    ),
                   ),
-                ],
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        tab.type == DocumentType.pdf
+                            ? Icons.picture_as_pdf_outlined
+                            : Icons.description_outlined,
+                        size: 15,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        '${tab.title}${tab.isModified ? ' •' : ''}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: isActive
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                          color: isActive
+                              ? colorScheme.primary
+                              : colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(9),
+                        onTap: () => onClose(index),
+                        child: Padding(
+                          padding: const EdgeInsets.all(3),
+                          child: Icon(
+                            Icons.close,
+                            size: 13,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           );

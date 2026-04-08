@@ -12,6 +12,6 @@ Future<void> setupServiceLocator() async {
   getIt.registerLazySingleton<FileService>(() => FileService());
   getIt.registerLazySingleton<ThemeService>(() => ThemeService());
 
-  // Initialize the chinese_popup_dict package (uses its own get_it instance).
-  await setupChinesePopupDict();
+  // Initialize the popup dictionary before any wrapped reader text is built.
+  await initializeChinesePopupDict();
 }
