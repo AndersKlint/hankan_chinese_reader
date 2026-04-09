@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:chinese_popup_dict/chinese_popup_dict.dart';
 
@@ -106,29 +107,31 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
           height:
               rect.height *
               1.2, // Hidden text layer is usually a bit smaller than actual text.
-          child: FittedBox(
-            fit: BoxFit.fill,
-            alignment: Alignment.topLeft,
-            child: ChinesePopupDict(
-              enableSelection: false,
-              contextText: _pageText!.fullText,
-              contextOffset: fragment.index,
-              text: Text(
-                fragment.text,
-                maxLines: 1,
-                softWrap: false,
-                style: const TextStyle(
-                  fontSize: 20,
-                  color: Colors.transparent,
-                  height: 1.0,
-                  leadingDistribution: TextLeadingDistribution.even,
-                ),
-                strutStyle: const StrutStyle(
-                  fontSize: 20,
-                  forceStrutHeight: true,
-                  height: 1.0,
-                  leading: 0,
-                  leadingDistribution: TextLeadingDistribution.even,
+          child: _PassThroughPointer(
+            child: FittedBox(
+              fit: BoxFit.fill,
+              alignment: Alignment.topLeft,
+              child: ChinesePopupDict(
+                enableSelection: false,
+                contextText: _pageText!.fullText,
+                contextOffset: fragment.index,
+                text: Text(
+                  fragment.text,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    color: Colors.transparent,
+                    height: 1.0,
+                    leadingDistribution: TextLeadingDistribution.even,
+                  ),
+                  strutStyle: const StrutStyle(
+                    fontSize: 20,
+                    forceStrutHeight: true,
+                    height: 1.0,
+                    leading: 0,
+                    leadingDistribution: TextLeadingDistribution.even,
+                  ),
                 ),
               ),
             ),
@@ -136,5 +139,28 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
         );
       }).toList(),
     );
+  }
+}
+
+/// Used to let scroll and drag events pass through the popupdict text to pdf layer underneath,
+/// allowing scrolling while pointer is on the popup text and selecting text over the in the invisible text layer.
+class _PassThroughPointer extends SingleChildRenderObjectWidget {
+  const _PassThroughPointer({required super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderPassThroughPointer();
+  }
+}
+
+class _RenderPassThroughPointer extends RenderProxyBox {
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) {
+    if (!size.contains(position) || child == null) {
+      return false;
+    }
+
+    child!.hitTest(result, position: position);
+    return false;
   }
 }
