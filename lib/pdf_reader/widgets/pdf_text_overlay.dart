@@ -19,6 +19,43 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
   bool _isLoading = true;
   bool _hasCalculatedText = false;
 
+  Rect _fragmentRect(PdfPageTextFragment fragment) {
+    final charBounds = _tightCharBounds(fragment);
+    return charBounds.toRect(
+      page: widget.page,
+      scaledPageSize: widget.pageRect.size,
+    );
+  }
+
+  PdfRect _tightCharBounds(PdfPageTextFragment fragment) {
+    final rects = fragment.charRects;
+    if (rects.isEmpty) {
+      return fragment.bounds;
+    }
+
+    var left = rects.first.left;
+    var top = rects.first.top;
+    var right = rects.first.right;
+    var bottom = rects.first.bottom;
+
+    for (final rect in rects.skip(1)) {
+      if (rect.left < left) {
+        left = rect.left;
+      }
+      if (rect.top > top) {
+        top = rect.top;
+      }
+      if (rect.right > right) {
+        right = rect.right;
+      }
+      if (rect.bottom < bottom) {
+        bottom = rect.bottom;
+      }
+    }
+
+    return PdfRect(left, top, right, bottom);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -93,20 +130,13 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
 
     return Stack(
       children: _pageText!.fragments.map((fragment) {
-        // Use pdfrx's toRect for correct coordinate conversion
-        // This uses uniform scaling based on height, matching the PDF viewer
-        final rect = fragment.bounds.toRect(
-          page: widget.page,
-          scaledPageSize: widget.pageRect.size,
-        );
+        final rect = _fragmentRect(fragment);
 
         return Positioned(
           left: rect.left,
-          top: rect.top, // Hidden text layer is usually offset a bit.
+          top: rect.top - 1, // Adjust for pdf layout inaccuracies
           width: rect.width,
-          height:
-              rect.height *
-              1.2, // Hidden text layer is usually a bit smaller than actual text.
+          height: rect.height * 1.15, // Adjust for pdf layout inaccuracies
           child: _PassThroughPointer(
             child: FittedBox(
               fit: BoxFit.fill,
