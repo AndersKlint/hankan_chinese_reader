@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
+import 'dart:math' as math;
 import 'package:pdfrx/pdfrx.dart';
 import 'package:hankan_chinese_reader/core/service_locator.dart';
 import 'package:hankan_chinese_reader/core/services/tab_service.dart';
@@ -18,6 +21,7 @@ class PdfReaderScreen extends StatefulWidget {
 
 class _PdfReaderScreenState extends State<PdfReaderScreen> {
   final PdfViewerController _pdfController = PdfViewerController();
+  final GlobalKey _pdfViewerKey = GlobalKey();
   PdfTextSearcher? _textSearcher;
   late final TabService _tabService;
 
@@ -28,6 +32,10 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   bool _showThumbnails = false;
   bool _showSearchBar = false;
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+
+  static const double _zoomStep = 1.1;
+  static const double _scrollZoomSensitivity = 0.002;
 
   @override
   void initState() {
@@ -48,6 +56,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
     _pdfController.removeListener(_onPdfStateChanged);
     _textSearcher?.dispose();
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -77,9 +86,9 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
     }
   }
 
-  void _toggleSearch() {
+  void _setShowSearch(bool show) {
     setState(() {
-      _showSearchBar = !_showSearchBar;
+      _showSearchBar = show;
       if (!_showSearchBar) {
         _searchController.clear();
         _textSearcher?.resetTextSearch();
@@ -92,129 +101,300 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
     _tabService.notifyTabStateChanged();
   }
 
+  void _activateSearch() {
+    if (!_showSearchBar) {
+      _setShowSearch(true);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_showSearchBar) {
+        return;
+      }
+      _searchFocusNode.requestFocus();
+      _searchController.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _searchController.text.length,
+      );
+    });
+  }
+
+  Offset _viewerCenterLocalPosition() {
+    final renderObject = _pdfViewerKey.currentContext?.findRenderObject();
+    if (renderObject is RenderBox) {
+      return renderObject.size.center(Offset.zero);
+    }
+    return Offset.zero;
+  }
+
+  Future<void> _zoomByFactor(double factor, {Offset? localPosition}) async {
+    if (!_pdfController.isReady) {
+      return;
+    }
+    final position = localPosition ?? _viewerCenterLocalPosition();
+    final targetZoom = (_pdfController.currentZoom * factor).clamp(
+      _pdfController.minScale,
+      _pdfController.params.maxScale,
+    );
+    await _pdfController.zoomOnLocalPosition(
+      localPosition: position,
+      newZoom: targetZoom,
+      duration: const Duration(milliseconds: 120),
+    );
+  }
+
+  Future<void> _zoomIn({Offset? localPosition}) =>
+      _zoomByFactor(_zoomStep, localPosition: localPosition);
+
+  Future<void> _zoomOut({Offset? localPosition}) async {
+    await _zoomByFactor(1 / _zoomStep, localPosition: localPosition);
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_pdfController.isReady) {
+      return;
+    }
+
+    final renderObject = _pdfViewerKey.currentContext?.findRenderObject();
+    if (renderObject is! RenderBox) {
+      return;
+    }
+
+    final localPosition = renderObject.globalToLocal(event.position);
+    if (HardwareKeyboard.instance.isControlPressed) {
+      final zoomDirection = event.scrollDelta.dy + event.scrollDelta.dx;
+      final factor = math.exp(-zoomDirection * _scrollZoomSensitivity);
+      final targetZoom = _pdfController.currentZoom * factor;
+      final clampedZoom = targetZoom.clamp(
+        _pdfController.minScale,
+        _pdfController.params.maxScale,
+      );
+
+      _pdfController.zoomOnLocalPosition(
+        localPosition: localPosition,
+        newZoom: clampedZoom,
+        duration: Duration.zero,
+      );
+      return;
+    }
+
+    if (event.kind == PointerDeviceKind.trackpad) {
+      return;
+    }
+
+    final dx = -event.scrollDelta.dx / _pdfController.currentZoom;
+    final dy = -event.scrollDelta.dy / _pdfController.currentZoom;
+    final matrix = _pdfController.value.clone()
+      ..translateByDouble(dx, dy, 0, 1);
+    _pdfController.value = _pdfController.makeMatrixInSafeRange(
+      matrix,
+      forceClamp: true,
+    );
+  }
+
+  void _onPointerPanZoomUpdate(PointerPanZoomUpdateEvent event) {
+    if (!_pdfController.isReady ||
+        !HardwareKeyboard.instance.isControlPressed) {
+      return;
+    }
+
+    final scrollDelta = event.panDelta.dy + event.panDelta.dx;
+    final scaleFactorFromScroll = math.exp(
+      -scrollDelta * _scrollZoomSensitivity,
+    );
+    final scaleFactorFromGesture = (event.scale - 1.0).abs() > 0.001
+        ? event.scale
+        : 1.0;
+    final targetZoom =
+        _pdfController.currentZoom *
+        scaleFactorFromScroll *
+        scaleFactorFromGesture;
+    final clampedZoom = targetZoom.clamp(
+      _pdfController.minScale,
+      _pdfController.params.maxScale,
+    );
+
+    _pdfController.zoomOnLocalPosition(
+      localPosition: event.localPosition,
+      newZoom: clampedZoom,
+      duration: Duration.zero,
+    );
+  }
+
+  KeyEventResult _handleKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape && _showSearchBar) {
+      _setShowSearch(false);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_filePath == null) {
       return const Center(child: Text('No PDF file specified.'));
     }
 
-    return Column(
-      children: [
-        // Top Toolbar
-        PdfToolbar(
-          showThumbnails: _showThumbnails,
-          onToggleThumbnails: () {
-            setState(() => _showThumbnails = !_showThumbnails);
-            final tab = _tabService.tabs.value.firstWhere(
-              (t) => t.id == widget.tabId,
-            );
-            tab.showPdfThumbnails = _showThumbnails;
-            _tabService.notifyTabStateChanged();
-          },
-          showSearchBar: _showSearchBar,
-          onToggleSearch: _toggleSearch,
-          searchController: _searchController,
-          textSearcher: _textSearcher,
-          currentPage: _currentPage,
-          pageCount: _pageCount,
-          onPageSubmitted: _jumpToPage,
-          onSearchChanged: (value) {
-            final tab = _tabService.tabs.value.firstWhere(
-              (t) => t.id == widget.tabId,
-            );
-            tab.pdfSearchQuery = value;
-          },
-        ),
-        Expanded(
-          child: Row(
-            children: [
-              // Left Thumbnail Sidebar
-              if (_showThumbnails)
-                PdfThumbnailSidebar(
-                  filePath: _filePath!,
-                  currentPage: _currentPage,
-                  onPageTapped: _jumpToPage,
-                ),
-
-              // PDF Viewer
-              Expanded(
-                child: PdfViewer.file(
-                  _filePath!,
-                  controller: _pdfController,
-                  params: PdfViewerParams(
-                    scrollPhysics: const ClampingScrollPhysics(),
-                    scrollByMouseWheel: 1,
-                    onViewerReady: (document, controller) {
-                      setState(() {
-                        _textSearcher = PdfTextSearcher(_pdfController);
-                      });
-
-                      final tab = _tabService.tabs.value.firstWhere(
-                        (t) => t.id == widget.tabId,
-                      );
-                      final targetPage = tab.pdfCurrentPage.clamp(
-                        1,
-                        document.pages.length,
-                      );
-                      if (targetPage != 1) {
-                        _pdfController.goToPage(
-                          pageNumber: targetPage,
-                          duration: Duration.zero,
-                        );
-                      }
-                      if (_showSearchBar && tab.pdfSearchQuery.isNotEmpty) {
-                        _textSearcher?.startTextSearch(tab.pdfSearchQuery);
-                      }
-                    },
-                    onPageChanged: (pageNumber) {
-                      if (pageNumber != null && pageNumber != _currentPage) {
-                        setState(() => _currentPage = pageNumber);
-                        final tab = _tabService.tabs.value.firstWhere(
-                          (t) => t.id == widget.tabId,
-                        );
-                        tab.pdfCurrentPage = pageNumber;
-                      }
-                    },
-                    textSelectionParams: const PdfTextSelectionParams(
-                      enabled: true,
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true):
+            _activateSearch,
+        const SingleActivator(LogicalKeyboardKey.numpadAdd, control: true):
+            _zoomIn,
+        const SingleActivator(LogicalKeyboardKey.equal, control: true): _zoomIn,
+        const SingleActivator(
+          LogicalKeyboardKey.equal,
+          control: true,
+          shift: true,
+        ): _zoomIn,
+        const SingleActivator(LogicalKeyboardKey.minus, control: true):
+            _zoomOut,
+        const SingleActivator(LogicalKeyboardKey.numpadSubtract, control: true):
+            _zoomOut,
+      },
+      child: Focus(
+        autofocus: true,
+        onKeyEvent: (_, event) => _handleKeyEvent(event),
+        child: Column(
+          children: [
+            PdfToolbar(
+              showThumbnails: _showThumbnails,
+              onToggleThumbnails: () {
+                setState(() => _showThumbnails = !_showThumbnails);
+                final tab = _tabService.tabs.value.firstWhere(
+                  (t) => t.id == widget.tabId,
+                );
+                tab.showPdfThumbnails = _showThumbnails;
+                _tabService.notifyTabStateChanged();
+              },
+              showSearchBar: _showSearchBar,
+              onActivateSearch: _activateSearch,
+              onCloseSearch: () => _setShowSearch(false),
+              searchController: _searchController,
+              searchFocusNode: _searchFocusNode,
+              textSearcher: _textSearcher,
+              currentPage: _currentPage,
+              pageCount: _pageCount,
+              onPageSubmitted: _jumpToPage,
+              onZoomIn: _zoomIn,
+              onZoomOut: _zoomOut,
+              canZoom: _pdfController.isReady,
+              onSearchChanged: (value) {
+                final tab = _tabService.tabs.value.firstWhere(
+                  (t) => t.id == widget.tabId,
+                );
+                tab.pdfSearchQuery = value;
+              },
+            ),
+            Expanded(
+              child: Row(
+                children: [
+                  if (_showThumbnails)
+                    PdfThumbnailSidebar(
+                      filePath: _filePath!,
+                      currentPage: _currentPage,
+                      onPageTapped: _jumpToPage,
                     ),
-                    pageOverlaysBuilder: (context, pageRect, page) {
-                      return [PdfTextOverlay(page: page, pageRect: pageRect)];
-                    },
-                    // Add vertical scrollbar
-                    viewerOverlayBuilder: (context, size, handleLinkTap) => [
-                      PdfViewerScrollThumb(
-                        controller: _pdfController,
-                        orientation: ScrollbarOrientation.right,
-                        margin: 6,
-                        thumbSize: const Size(10, 64),
-                        thumbBuilder:
-                            (context, thumbSize, pageNumber, controller) {
-                              return DecoratedBox(
-                                decoration: BoxDecoration(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.primary.withValues(alpha: 0.75),
-                                  borderRadius: BorderRadius.circular(
-                                    thumbSize.width / 2,
-                                  ),
-                                ),
+                  Expanded(
+                    child: Listener(
+                      onPointerSignal: _onPointerSignal,
+                      onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
+                      child: RepaintBoundary(
+                        key: _pdfViewerKey,
+                        child: PdfViewer.file(
+                          _filePath!,
+                          controller: _pdfController,
+                          params: PdfViewerParams(
+                            scrollByMouseWheel: 0.1,
+                            onViewerReady: (document, controller) {
+                              setState(() {
+                                _textSearcher = PdfTextSearcher(_pdfController);
+                              });
+
+                              final tab = _tabService.tabs.value.firstWhere(
+                                (t) => t.id == widget.tabId,
                               );
+                              final targetPage = tab.pdfCurrentPage.clamp(
+                                1,
+                                document.pages.length,
+                              );
+                              if (targetPage != 1) {
+                                _pdfController.goToPage(
+                                  pageNumber: targetPage,
+                                  duration: Duration.zero,
+                                );
+                              }
+                              if (_showSearchBar &&
+                                  tab.pdfSearchQuery.isNotEmpty) {
+                                _textSearcher?.startTextSearch(
+                                  tab.pdfSearchQuery,
+                                );
+                                _activateSearch();
+                              }
                             },
+                            onPageChanged: (pageNumber) {
+                              if (pageNumber != null &&
+                                  pageNumber != _currentPage) {
+                                setState(() => _currentPage = pageNumber);
+                                final tab = _tabService.tabs.value.firstWhere(
+                                  (t) => t.id == widget.tabId,
+                                );
+                                tab.pdfCurrentPage = pageNumber;
+                              }
+                            },
+                            textSelectionParams: const PdfTextSelectionParams(
+                              enabled: true,
+                            ),
+                            pageOverlaysBuilder: (context, pageRect, page) {
+                              return [
+                                PdfTextOverlay(page: page, pageRect: pageRect),
+                              ];
+                            },
+                            viewerOverlayBuilder:
+                                (context, size, handleLinkTap) => [
+                                  PdfViewerScrollThumb(
+                                    controller: _pdfController,
+                                    orientation: ScrollbarOrientation.right,
+                                    margin: 6,
+                                    thumbSize: const Size(10, 64),
+                                    thumbBuilder:
+                                        (
+                                          context,
+                                          thumbSize,
+                                          pageNumber,
+                                          controller,
+                                        ) {
+                                          return DecoratedBox(
+                                            decoration: BoxDecoration(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .primary
+                                                  .withValues(alpha: 0.75),
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                    thumbSize.width / 2,
+                                                  ),
+                                            ),
+                                          );
+                                        },
+                                  ),
+                                ],
+                            pagePaintCallbacks: [
+                              if (_textSearcher != null)
+                                _textSearcher!.pageTextMatchPaintCallback,
+                            ],
+                          ),
+                        ),
                       ),
-                    ],
-                    // Highlight search matches
-                    pagePaintCallbacks: [
-                      if (_textSearcher != null)
-                        _textSearcher!.pageTextMatchPaintCallback,
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

@@ -27,6 +27,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
   late final ScrollController _readScrollController;
   late final ScrollController _editScrollController;
   late final FocusNode _editFocusNode;
+  late final FocusNode _searchFocusNode;
 
   bool _showSearch = false;
   String _searchQuery = '';
@@ -48,6 +49,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
       initialScrollOffset: tab.textEditScrollOffset,
     );
     _editFocusNode = FocusNode();
+    _searchFocusNode = FocusNode();
     _readScrollController.addListener(_persistReadScrollOffset);
     _editScrollController.addListener(_persistEditScrollOffset);
 
@@ -74,6 +76,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
     _readScrollController.dispose();
     _editScrollController.dispose();
     _editFocusNode.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -111,6 +114,18 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
       tab.textSearchQuery = '';
     }
     _tabService.notifyTabStateChanged();
+  }
+
+  void _activateSearch() {
+    if (!_showSearch) {
+      _setShowSearch(true);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_showSearch) {
+        return;
+      }
+      _searchFocusNode.requestFocus();
+    });
   }
 
   void _recomputeSearchMatches(String text, String query) {
@@ -277,9 +292,15 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
           shift: true,
         ): () =>
             _editorService.redo(),
+        const SingleActivator(LogicalKeyboardKey.keyY, control: true): () =>
+            _editorService.redo(),
         const SingleActivator(LogicalKeyboardKey.keyS, control: true): _save,
-        const SingleActivator(LogicalKeyboardKey.keyF, control: true): () {
-          _setShowSearch(!_showSearch);
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true):
+            _activateSearch,
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          if (_showSearch) {
+            _setShowSearch(false);
+          }
         },
       },
       child: Focus(
@@ -293,7 +314,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
               onUndo: _editorService.canUndo ? _editorService.undo : null,
               onRedo: _editorService.canRedo ? _editorService.redo : null,
               onSave: _save,
-              onSearch: () => _setShowSearch(!_showSearch),
+              onSearch: _activateSearch,
             ),
 
             // Search bar
@@ -306,6 +327,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
                 onPreviousMatch: _previousMatch,
                 onNextMatch: _nextMatch,
                 onClose: () => _setShowSearch(false),
+                focusNode: _searchFocusNode,
               ),
 
             // Editor / Reader content

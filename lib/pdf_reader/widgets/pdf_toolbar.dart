@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 /// Top toolbar for the PDF reader with search, thumbnail toggle, and page nav.
@@ -6,25 +7,35 @@ class PdfToolbar extends StatelessWidget {
   final bool showThumbnails;
   final VoidCallback onToggleThumbnails;
   final bool showSearchBar;
-  final VoidCallback onToggleSearch;
+  final VoidCallback onActivateSearch;
+  final VoidCallback onCloseSearch;
   final TextEditingController searchController;
+  final FocusNode searchFocusNode;
   final PdfTextSearcher? textSearcher;
   final int currentPage;
   final int pageCount;
   final ValueChanged<int> onPageSubmitted;
   final ValueChanged<String>? onSearchChanged;
+  final VoidCallback onZoomOut;
+  final VoidCallback onZoomIn;
+  final bool canZoom;
 
   const PdfToolbar({
     super.key,
     required this.showThumbnails,
     required this.onToggleThumbnails,
     required this.showSearchBar,
-    required this.onToggleSearch,
+    required this.onActivateSearch,
+    required this.onCloseSearch,
     required this.searchController,
+    required this.searchFocusNode,
     required this.textSearcher,
     required this.currentPage,
     required this.pageCount,
     required this.onPageSubmitted,
+    required this.onZoomOut,
+    required this.onZoomIn,
+    this.canZoom = false,
     this.onSearchChanged,
   });
 
@@ -59,17 +70,33 @@ class PdfToolbar extends StatelessWidget {
           if (showSearchBar && textSearcher != null) ...[
             _SearchBar(
               controller: searchController,
+              focusNode: searchFocusNode,
               textSearcher: textSearcher!,
-              onClose: onToggleSearch,
+              onClose: onCloseSearch,
               onSearchChanged: onSearchChanged,
             ),
           ] else
             IconButton(
               icon: const Icon(Icons.search, size: 18),
               tooltip: 'Search in document (Ctrl+F)',
-              onPressed: textSearcher != null ? onToggleSearch : null,
+              onPressed: textSearcher != null ? onActivateSearch : null,
               visualDensity: VisualDensity.compact,
             ),
+
+          const VerticalDivider(width: 1, indent: 8, endIndent: 8),
+
+          IconButton(
+            icon: const Icon(Icons.remove, size: 18),
+            tooltip: 'Zoom out (Ctrl + Minus)',
+            onPressed: canZoom ? onZoomOut : null,
+            visualDensity: VisualDensity.compact,
+          ),
+          IconButton(
+            icon: const Icon(Icons.add, size: 18),
+            tooltip: 'Zoom in (Ctrl + Plus)',
+            onPressed: canZoom ? onZoomIn : null,
+            visualDensity: VisualDensity.compact,
+          ),
 
           const Spacer(),
 
@@ -88,18 +115,43 @@ class PdfToolbar extends StatelessWidget {
 }
 
 /// Inline search bar with prev/next/close and match count.
-class _SearchBar extends StatelessWidget {
+class _SearchBar extends StatefulWidget {
   final TextEditingController controller;
+  final FocusNode focusNode;
   final PdfTextSearcher textSearcher;
   final VoidCallback onClose;
   final ValueChanged<String>? onSearchChanged;
 
   const _SearchBar({
     required this.controller,
+    required this.focusNode,
     required this.textSearcher,
     required this.onClose,
     this.onSearchChanged,
   });
+
+  @override
+  State<_SearchBar> createState() => _SearchBarState();
+}
+
+class _SearchBarState extends State<_SearchBar> {
+  Future<void> _goToNextMatch() async {
+    await widget.textSearcher.goToNextMatch();
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
+    widget.focusNode.requestFocus();
+  }
+
+  Future<void> _goToPreviousMatch() async {
+    await widget.textSearcher.goToPrevMatch();
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
+    widget.focusNode.requestFocus();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -113,41 +165,59 @@ class _SearchBar extends StatelessWidget {
             Expanded(
               child: SizedBox(
                 height: 30,
-                child: TextField(
-                  controller: controller,
-                  style: Theme.of(context).textTheme.bodySmall,
-                  decoration: InputDecoration(
-                    hintText: 'Search...',
-                    hintStyle: TextStyle(
-                      color: colorScheme.onSurface.withValues(alpha: 0.5),
-                    ),
-                    prefixIcon: const Icon(Icons.search, size: 18),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                    isDense: true,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide.none,
-                    ),
-                    filled: true,
-                    fillColor: colorScheme.surfaceContainerLow,
-                  ),
-                  onChanged: (value) {
-                    textSearcher.startTextSearch(value);
-                    onSearchChanged?.call(value);
+                child: CallbackShortcuts(
+                  bindings: {
+                    const SingleActivator(LogicalKeyboardKey.enter):
+                        _goToNextMatch,
+                    const SingleActivator(
+                      LogicalKeyboardKey.enter,
+                      shift: true,
+                    ): _goToPreviousMatch,
+                    const SingleActivator(LogicalKeyboardKey.numpadEnter):
+                        _goToNextMatch,
+                    const SingleActivator(
+                      LogicalKeyboardKey.numpadEnter,
+                      shift: true,
+                    ): _goToPreviousMatch,
                   },
+                  child: TextField(
+                    controller: widget.controller,
+                    focusNode: widget.focusNode,
+                    autofocus: true,
+                    style: Theme.of(context).textTheme.bodySmall,
+                    decoration: InputDecoration(
+                      hintText: 'Search...',
+                      hintStyle: TextStyle(
+                        color: colorScheme.onSurface.withValues(alpha: 0.5),
+                      ),
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                      isDense: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: BorderSide.none,
+                      ),
+                      filled: true,
+                      fillColor: colorScheme.surfaceContainerLow,
+                    ),
+                    onChanged: (value) {
+                      widget.textSearcher.startTextSearch(value);
+                      widget.onSearchChanged?.call(value);
+                    },
+                  ),
                 ),
               ),
             ),
             const SizedBox(width: 2),
             // Match count indicator
             ListenableBuilder(
-              listenable: textSearcher,
+              listenable: widget.textSearcher,
               builder: (context, _) {
-                final matchCount = textSearcher.matches.length;
-                final currentIndex = textSearcher.currentIndex;
+                final matchCount = widget.textSearcher.matches.length;
+                final currentIndex = widget.textSearcher.currentIndex;
                 final text = matchCount > 0
                     ? '${(currentIndex ?? 0) + 1}/$matchCount'
-                    : textSearcher.isSearching
+                    : widget.textSearcher.isSearching
                     ? '...'
                     : '0/0';
                 return SizedBox(
@@ -165,19 +235,19 @@ class _SearchBar extends StatelessWidget {
             IconButton(
               icon: const Icon(Icons.keyboard_arrow_up, size: 18),
               tooltip: 'Previous match',
-              onPressed: () => textSearcher.goToPrevMatch(),
+              onPressed: _goToPreviousMatch,
               visualDensity: VisualDensity.compact,
             ),
             IconButton(
               icon: const Icon(Icons.keyboard_arrow_down, size: 18),
               tooltip: 'Next match',
-              onPressed: () => textSearcher.goToNextMatch(),
+              onPressed: _goToNextMatch,
               visualDensity: VisualDensity.compact,
             ),
             IconButton(
               icon: const Icon(Icons.close, size: 18),
               tooltip: 'Close search',
-              onPressed: onClose,
+              onPressed: widget.onClose,
               visualDensity: VisualDensity.compact,
             ),
           ],

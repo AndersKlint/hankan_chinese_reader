@@ -23,6 +23,9 @@ class TextSearchBar extends StatefulWidget {
   /// Called when the search bar is closed.
   final VoidCallback onClose;
 
+  /// Focus node used by the search field.
+  final FocusNode focusNode;
+
   const TextSearchBar({
     super.key,
     required this.matchLabel,
@@ -32,6 +35,7 @@ class TextSearchBar extends StatefulWidget {
     required this.onPreviousMatch,
     required this.onNextMatch,
     required this.onClose,
+    required this.focusNode,
   });
 
   @override
@@ -71,6 +75,7 @@ class _TextSearchBarState extends State<TextSearchBar> {
           Expanded(
             child: TextField(
               controller: _searchController,
+              focusNode: widget.focusNode,
               autofocus: true,
               style: const TextStyle(fontSize: 14),
               decoration: const InputDecoration(
