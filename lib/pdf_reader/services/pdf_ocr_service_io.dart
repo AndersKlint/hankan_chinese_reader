@@ -17,7 +17,7 @@ class PdfOcrService {
   static const double _maxCropHeightFraction = 0.22;
 
   /// Scale factor for rendering the crop region (higher = more detail for OCR).
-  static const double _renderScale = 0.8;
+  static const double _renderScale = 1.5;
 
   final MobileOcr _mobileOcr = MobileOcr();
   final Logger _logger = Logger('PdfOcrService');
@@ -37,14 +37,41 @@ class PdfOcrService {
     try {
       await warmUp();
 
-      final cropRect = _buildCropRect(page: page, pagePoint: pagePoint);
-      renderedImage = await page.render(
-        x: (cropRect.left * _renderScale).floor(),
-        y: ((page.height - cropRect.top) * _renderScale).floor(),
-        width: (cropRect.width * _renderScale).ceil(),
-        height: (cropRect.height * _renderScale).ceil(),
-        fullWidth: page.width * _renderScale,
-        fullHeight: page.height * _renderScale,
+      final resolvedPage = page.isLoaded ? page : await page.ensureLoaded();
+
+      final pageImageSize = Size(
+        resolvedPage.width * _renderScale,
+        resolvedPage.height * _renderScale,
+      );
+
+      final cropRect = _buildCropRect(page: resolvedPage, pagePoint: pagePoint);
+      // Match pdfrx viewer coordinates so OCR crops stay aligned on rotated pages.
+      final cropRectInImage = cropRect.toRect(
+        page: resolvedPage,
+        scaledPageSize: pageImageSize,
+      );
+      final tapInImage = pagePoint.toOffset(
+        page: resolvedPage,
+        scaledPageSize: pageImageSize,
+      );
+      final renderX = cropRectInImage.left.floor();
+      final renderY = cropRectInImage.top.floor();
+      final renderWidth = cropRectInImage.width.ceil().clamp(
+        1,
+        pageImageSize.width.ceil(),
+      );
+      final renderHeight = cropRectInImage.height.ceil().clamp(
+        1,
+        pageImageSize.height.ceil(),
+      );
+
+      renderedImage = await resolvedPage.render(
+        x: renderX,
+        y: renderY,
+        width: renderWidth,
+        height: renderHeight,
+        fullWidth: pageImageSize.width,
+        fullHeight: pageImageSize.height,
         backgroundColor: 0xffffffff,
       );
 
@@ -69,9 +96,9 @@ class PdfOcrService {
         return null;
       }
 
-      final localTap = Offset(
-        (pagePoint.x - cropRect.left) * _renderScale,
-        (cropRect.top - pagePoint.y) * _renderScale,
+      final localTap = tapInImage.translate(
+        -renderX.toDouble(),
+        -renderY.toDouble(),
       );
       final bestBlock = _pickBestBlock(blocks, localTap);
       if (bestBlock == null || bestBlock.characters.isEmpty) {
@@ -93,7 +120,9 @@ class PdfOcrService {
         charIndex: charIndex,
         targetRectOnPage: _mapCharacterRectToPage(
           bestBlock.characters[charIndex].boundingBox,
-          cropRect,
+          resolvedPage,
+          pageImageSize,
+          Offset(renderX.toDouble(), renderY.toDouble()),
         ),
       );
     } catch (error, stackTrace) {
@@ -153,13 +182,14 @@ class PdfOcrService {
     return bestIndex;
   }
 
-  PdfRect _mapCharacterRectToPage(Rect imageRect, PdfRect cropRect) {
-    final left = cropRect.left + imageRect.left / _renderScale;
-    final right = cropRect.left + imageRect.right / _renderScale;
-    final top = cropRect.top - imageRect.top / _renderScale;
-    final bottom = cropRect.top - imageRect.bottom / _renderScale;
-    return PdfRect(left, top, right, bottom);
-  }
+  PdfRect _mapCharacterRectToPage(
+    Rect imageRect,
+    PdfPage page,
+    Size pageImageSize,
+    Offset cropOriginInImage,
+  ) => imageRect
+      .shift(cropOriginInImage)
+      .toPdfRect(page: page, scaledPageSize: pageImageSize);
 
   double _distanceToRect(Rect rect, Offset point) {
     if (rect.contains(point)) {
