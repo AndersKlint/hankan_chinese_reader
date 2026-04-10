@@ -30,7 +30,7 @@ class HankanApp extends StatelessWidget {
       listenable: themeService,
       builder: (context, _) {
         return MaterialApp(
-          title: 'Hankan Chinese Reader',
+          title: 'HanKan - Chinese Reader',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light,
           darkTheme: AppTheme.dark,
