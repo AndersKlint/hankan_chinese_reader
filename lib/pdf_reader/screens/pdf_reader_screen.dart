@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -116,6 +117,24 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   bool get _isOcrEnabled =>
       _ocrEnabled ??
       (_pdfOcrService.isSupported && _isCurrentPageMissingTextLayer);
+
+  void _handleOcrToggleRequested(bool enabled) {
+    if (kIsWeb) {
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(
+              'OCR not available on web. Use the desktop/mobile version instead.',
+            ),
+          ),
+        );
+      return;
+    }
+
+    _setOcrEnabled(enabled);
+  }
 
   void _setOcrEnabled(bool enabled) {
     setState(() {
@@ -395,8 +414,8 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                     onZoomOut: _zoomOut,
                     canZoom: _pdfController.isReady,
                     ocrEnabled: _isOcrEnabled,
-                    canToggleOcr: _pdfOcrService.isSupported,
-                    onOcrChanged: _setOcrEnabled,
+                    canToggleOcr: _pdfOcrService.isSupported || kIsWeb,
+                    onOcrChanged: _handleOcrToggleRequested,
                     showOcrProgress: _isPerformingOcrLookup,
                     onSearchChanged: (value) {
                       final tab = _tabService.tabs.value.firstWhere(
