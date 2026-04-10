@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:watch_it/watch_it.dart';
 import 'package:hankan_chinese_reader/core/service_locator.dart';
@@ -6,6 +9,7 @@ import 'package:hankan_chinese_reader/core/services/file_service.dart';
 import 'package:hankan_chinese_reader/core/services/tab_service.dart';
 import 'package:hankan_chinese_reader/text_editor/models/text_search_result.dart';
 import 'package:hankan_chinese_reader/text_editor/services/text_editor_service.dart';
+import 'package:hankan_chinese_reader/text_editor/widgets/text_content_style.dart';
 import 'package:hankan_chinese_reader/text_editor/widgets/text_edit_view.dart';
 import 'package:hankan_chinese_reader/text_editor/widgets/text_read_view.dart';
 import 'package:hankan_chinese_reader/text_editor/widgets/text_search_bar.dart';
@@ -34,6 +38,10 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
   List<TextSearchResult> _matches = const <TextSearchResult>[];
   int _currentMatchIndex = -1;
   GlobalKey? _activeMatchKey;
+  late double _fontSize;
+
+  static const double _zoomStep = 1.1;
+  static const double _scrollZoomSensitivity = 0.002;
 
   @override
   void initState() {
@@ -60,6 +68,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
     );
     _showSearch = tab.showTextSearch;
     _searchQuery = tab.textSearchQuery;
+    _fontSize = tab.textFontSize;
     if (_searchQuery.isNotEmpty) {
       _recomputeSearchMatches(_editorService.content.value, _searchQuery);
     }
@@ -126,6 +135,62 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
       }
       _searchFocusNode.requestFocus();
     });
+  }
+
+  double _clampFontSize(double value) =>
+      value.clamp(textEditorMinFontSize, textEditorMaxFontSize).toDouble();
+
+  void _setFontSize(double value) {
+    final nextFontSize = _clampFontSize(value);
+    if ((nextFontSize - _fontSize).abs() < 0.01) {
+      return;
+    }
+
+    setState(() => _fontSize = nextFontSize);
+    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
+    tab.textFontSize = nextFontSize;
+    _tabService.notifyTabStateChanged();
+  }
+
+  Future<void> _zoomByFactor(double factor, {Offset? localPosition}) async {
+    _setFontSize(_fontSize * factor);
+  }
+
+  Future<void> _zoomIn({Offset? localPosition}) =>
+      _zoomByFactor(_zoomStep, localPosition: localPosition);
+
+  Future<void> _zoomOut({Offset? localPosition}) =>
+      _zoomByFactor(1 / _zoomStep, localPosition: localPosition);
+
+  void _resetZoom() {
+    _setFontSize(textEditorDefaultFontSize);
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent ||
+        !HardwareKeyboard.instance.isControlPressed) {
+      return;
+    }
+
+    final zoomDirection = event.scrollDelta.dy + event.scrollDelta.dx;
+    final factor = math.exp(-zoomDirection * _scrollZoomSensitivity);
+    _zoomByFactor(factor);
+  }
+
+  void _onPointerPanZoomUpdate(PointerPanZoomUpdateEvent event) {
+    final hasScaleGesture = (event.scale - 1.0).abs() > 0.001;
+    final isControlZoom = HardwareKeyboard.instance.isControlPressed;
+    if (!isControlZoom && !hasScaleGesture) {
+      return;
+    }
+
+    final scaleFactorFromScroll = isControlZoom
+        ? math.exp(
+            -(event.panDelta.dy + event.panDelta.dx) * _scrollZoomSensitivity,
+          )
+        : 1.0;
+    final scaleFactorFromGesture = hasScaleGesture ? event.scale : 1.0;
+    _zoomByFactor(scaleFactorFromScroll * scaleFactorFromGesture);
   }
 
   void _recomputeSearchMatches(String text, String query) {
@@ -297,6 +362,22 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
         const SingleActivator(LogicalKeyboardKey.keyS, control: true): _save,
         const SingleActivator(LogicalKeyboardKey.keyF, control: true):
             _activateSearch,
+        const SingleActivator(LogicalKeyboardKey.numpadAdd, control: true):
+            _zoomIn,
+        const SingleActivator(LogicalKeyboardKey.equal, control: true): _zoomIn,
+        const SingleActivator(
+          LogicalKeyboardKey.equal,
+          control: true,
+          shift: true,
+        ): _zoomIn,
+        const SingleActivator(LogicalKeyboardKey.minus, control: true):
+            _zoomOut,
+        const SingleActivator(LogicalKeyboardKey.numpadSubtract, control: true):
+            _zoomOut,
+        const SingleActivator(LogicalKeyboardKey.digit0, control: true):
+            _resetZoom,
+        const SingleActivator(LogicalKeyboardKey.numpad0, control: true):
+            _resetZoom,
         const SingleActivator(LogicalKeyboardKey.escape): () {
           if (_showSearch) {
             _setShowSearch(false);
@@ -315,6 +396,10 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
               onRedo: _editorService.canRedo ? _editorService.redo : null,
               onSave: _save,
               onSearch: _activateSearch,
+              onZoomIn: _zoomIn,
+              onZoomOut: _zoomOut,
+              canZoomIn: _fontSize < textEditorMaxFontSize,
+              canZoomOut: _fontSize > textEditorMinFontSize,
             ),
 
             // Search bar
@@ -332,34 +417,40 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
 
             // Editor / Reader content
             Expanded(
-              child: isReadMode
-                  ? TextReadView(
-                      text: content,
-                      searchQuery: _searchQuery,
-                      matches: _matches,
-                      activeMatchIndex: _currentMatchIndex,
-                      scrollController: _readScrollController,
-                      activeMatchKey: _activeMatchKey,
-                    )
-                  : TextEditView(
-                      initialText: content,
-                      scrollController: _editScrollController,
-                      focusNode: _editFocusNode,
-                      highlightedSelection: _activeSelection,
-                      onChanged: (text) {
-                        _editorService.pushUndoState();
-                        _editorService.updateContent(text);
-                        // Keep tab model in sync.
-                        final tabService = getIt<TabService>();
-                        final tab = tabService.tabs.value.firstWhere(
-                          (t) => t.id == widget.tabId,
-                        );
-                        tab.textContent = text;
-                        if (_searchQuery.isNotEmpty) {
-                          _recomputeSearchMatches(text, _searchQuery);
-                        }
-                      },
-                    ),
+              child: Listener(
+                onPointerSignal: _onPointerSignal,
+                onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
+                child: isReadMode
+                    ? TextReadView(
+                        text: content,
+                        searchQuery: _searchQuery,
+                        matches: _matches,
+                        activeMatchIndex: _currentMatchIndex,
+                        scrollController: _readScrollController,
+                        activeMatchKey: _activeMatchKey,
+                        fontSize: _fontSize,
+                      )
+                    : TextEditView(
+                        initialText: content,
+                        scrollController: _editScrollController,
+                        focusNode: _editFocusNode,
+                        highlightedSelection: _activeSelection,
+                        fontSize: _fontSize,
+                        onChanged: (text) {
+                          _editorService.pushUndoState();
+                          _editorService.updateContent(text);
+                          // Keep tab model in sync.
+                          final tabService = getIt<TabService>();
+                          final tab = tabService.tabs.value.firstWhere(
+                            (t) => t.id == widget.tabId,
+                          );
+                          tab.textContent = text;
+                          if (_searchQuery.isNotEmpty) {
+                            _recomputeSearchMatches(text, _searchQuery);
+                          }
+                        },
+                      ),
+              ),
             ),
           ],
         ),
@@ -384,6 +475,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
       );
       _showSearch = tab.showTextSearch;
       _searchQuery = tab.textSearchQuery;
+      _fontSize = tab.textFontSize;
       _recomputeSearchMatches(_editorService.content.value, _searchQuery);
     }
   }
@@ -397,6 +489,10 @@ class _Toolbar extends StatelessWidget {
   final VoidCallback? onRedo;
   final VoidCallback onSave;
   final VoidCallback onSearch;
+  final VoidCallback onZoomOut;
+  final VoidCallback onZoomIn;
+  final bool canZoomOut;
+  final bool canZoomIn;
 
   const _Toolbar({
     required this.isReadMode,
@@ -405,6 +501,10 @@ class _Toolbar extends StatelessWidget {
     required this.onRedo,
     required this.onSave,
     required this.onSearch,
+    required this.onZoomOut,
+    required this.onZoomIn,
+    required this.canZoomOut,
+    required this.canZoomIn,
   });
 
   @override
@@ -460,6 +560,19 @@ class _Toolbar extends StatelessWidget {
             tooltip: 'Search (Ctrl+F)',
             onPressed: onSearch,
             iconSize: 18,
+            visualDensity: VisualDensity.compact,
+          ),
+          const VerticalDivider(indent: 10, endIndent: 10),
+          IconButton(
+            icon: const Icon(Icons.remove, size: 18),
+            tooltip: 'Decrease text size (Ctrl + Minus)',
+            onPressed: canZoomOut ? onZoomOut : null,
+            visualDensity: VisualDensity.compact,
+          ),
+          IconButton(
+            icon: const Icon(Icons.add, size: 18),
+            tooltip: 'Increase text size (Ctrl + Plus)',
+            onPressed: canZoomIn ? onZoomIn : null,
             visualDensity: VisualDensity.compact,
           ),
           IconButton(

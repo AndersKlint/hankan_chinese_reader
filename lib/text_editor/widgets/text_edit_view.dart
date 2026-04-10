@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hankan_chinese_reader/text_editor/widgets/text_content_style.dart';
 
 /// Text editing view with a multi-line text field.
 class TextEditView extends StatefulWidget {
@@ -17,12 +18,16 @@ class TextEditView extends StatefulWidget {
   /// Current highlighted match selection.
   final TextSelection? highlightedSelection;
 
+  /// Font size used by the editor content.
+  final double fontSize;
+
   const TextEditView({
     super.key,
     required this.initialText,
     required this.onChanged,
     required this.scrollController,
     required this.focusNode,
+    required this.fontSize,
     this.highlightedSelection,
   });
 
@@ -33,6 +38,19 @@ class TextEditView extends StatefulWidget {
 class _TextEditViewState extends State<TextEditView> {
   late final TextEditingController _controller;
   bool _ignoreChange = false;
+
+  TextStyle _textStyle(BuildContext context) {
+    return textEditorContentTextStyle(context, fontSize: widget.fontSize) ??
+        DefaultTextStyle.of(context).style.copyWith(fontSize: widget.fontSize);
+  }
+
+  StrutStyle _strutStyle(BuildContext context) {
+    final strutStyle = textEditorContentStrutStyle(
+      context,
+      fontSize: widget.fontSize,
+    );
+    return strutStyle ?? StrutStyle.fromTextStyle(_textStyle(context));
+  }
 
   @override
   void initState() {
@@ -70,7 +88,6 @@ class _TextEditViewState extends State<TextEditView> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -93,45 +110,62 @@ class _TextEditViewState extends State<TextEditView> {
             child: Container(
               decoration: BoxDecoration(
                 color: editorSurface,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(textEditorSurfaceRadius),
                 border: Border.all(color: colorScheme.outlineVariant),
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: TextField(
-                  controller: _controller,
-                  focusNode: widget.focusNode,
-                  scrollController: widget.scrollController,
-                  maxLines: null,
-                  expands: true,
-                  textAlignVertical: TextAlignVertical.top,
-                  cursorColor: colorScheme.primary,
-                  style: textTheme.bodyLarge?.copyWith(
-                    fontSize: 18,
-                    height: 1.8,
-                  ),
-                  decoration: InputDecoration(
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    disabledBorder: InputBorder.none,
-                    hintText: 'Enter Chinese text here...',
-                    hintStyle: textTheme.bodyLarge?.copyWith(
-                      fontSize: 18,
-                      height: 1.8,
-                      color: colorScheme.onSurfaceVariant,
+                borderRadius: BorderRadius.circular(textEditorSurfaceRadius),
+                child: Padding(
+                  padding: textEditorContentPadding,
+                  child: ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _controller,
+                    builder: (context, value, child) {
+                      return Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (value.text.isEmpty)
+                            IgnorePointer(
+                              child: Align(
+                                alignment: Alignment.topLeft,
+                                child: Text(
+                                  'Enter Chinese text here...',
+                                  style:
+                                      textEditorContentTextStyle(
+                                        context,
+                                        fontSize: widget.fontSize,
+                                      )?.copyWith(
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                ),
+                              ),
+                            ),
+                          child!,
+                        ],
+                      );
+                    },
+                    child: EditableText(
+                      controller: _controller,
+                      focusNode: widget.focusNode,
+                      scrollController: widget.scrollController,
+                      maxLines: null,
+                      expands: true,
+                      cursorColor: colorScheme.primary,
+                      backgroundCursorColor: colorScheme.onSurface,
+                      style: _textStyle(context),
+                      strutStyle: _strutStyle(context),
+                      textAlign: TextAlign.start,
+                      textDirection: Directionality.of(context),
+                      textHeightBehavior: textEditorContentTextHeightBehavior,
+                      selectionColor: colorScheme.primary.withValues(
+                        alpha: 0.24,
+                      ),
+                      onChanged: (text) {
+                        if (!_ignoreChange) {
+                          widget.onChanged(text);
+                        }
+                      },
                     ),
-                    contentPadding: const EdgeInsets.all(20),
-                    filled: true,
-                    fillColor: editorSurface,
-                    hoverColor: editorSurface,
-                    focusColor: editorSurface,
                   ),
-                  onChanged: (text) {
-                    if (!_ignoreChange) {
-                      widget.onChanged(text);
-                    }
-                  },
                 ),
               ),
             ),

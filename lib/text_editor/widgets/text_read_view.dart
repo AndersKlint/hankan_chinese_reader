@@ -1,6 +1,8 @@
 import 'package:chinese_popup_dict/chinese_popup_dict.dart';
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 import 'package:hankan_chinese_reader/text_editor/models/text_search_result.dart';
+import 'package:hankan_chinese_reader/text_editor/widgets/text_content_style.dart';
 
 /// Read-only text view with the popup dictionary active.
 class TextReadView extends StatelessWidget {
@@ -22,6 +24,9 @@ class TextReadView extends StatelessWidget {
   /// Key of the active match to scroll into view.
   final GlobalKey? activeMatchKey;
 
+  /// Font size used by the reader content.
+  final double fontSize;
+
   const TextReadView({
     super.key,
     required this.text,
@@ -29,14 +34,13 @@ class TextReadView extends StatelessWidget {
     required this.matches,
     required this.activeMatchIndex,
     required this.scrollController,
+    required this.fontSize,
     this.activeMatchKey,
   });
 
   List<InlineSpan> _buildHighlightedSpans(BuildContext context) {
     final spans = <InlineSpan>[];
-    final baseStyle = Theme.of(
-      context,
-    ).textTheme.bodyLarge?.copyWith(fontSize: 20, height: 2.0);
+    final baseStyle = textEditorContentTextStyle(context, fontSize: fontSize);
 
     if (searchQuery.isEmpty || matches.isEmpty) {
       spans.add(TextSpan(text: text, style: baseStyle));
@@ -122,20 +126,48 @@ class TextReadView extends StatelessWidget {
 
         return ColoredBox(
           color: backgroundSurface,
-          child: SingleChildScrollView(
-            controller: scrollController,
+          child: Padding(
             padding: EdgeInsets.fromLTRB(sidePadding, 16, sidePadding, 16),
             child: Container(
+              height: double.infinity,
               width: double.infinity,
               decoration: BoxDecoration(
                 color: readerSurface,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(textEditorSurfaceRadius),
                 border: Border.all(color: colorScheme.outlineVariant),
               ),
-              padding: const EdgeInsets.all(20),
-              child: ChinesePopupDict(
-                text: Text.rich(
-                  TextSpan(children: _buildHighlightedSpans(context)),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(textEditorSurfaceRadius),
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  padding: textEditorContentPadding,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: math.max(
+                        0,
+                        constraints.maxHeight -
+                            textEditorContentPadding.vertical,
+                      ),
+                    ),
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ChinesePopupDict(
+                          text: Text.rich(
+                            TextSpan(children: _buildHighlightedSpans(context)),
+                            strutStyle: textEditorContentStrutStyle(
+                              context,
+                              fontSize: fontSize,
+                            ),
+                            textHeightBehavior:
+                                textEditorContentTextHeightBehavior,
+                            textWidthBasis: TextWidthBasis.parent,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),

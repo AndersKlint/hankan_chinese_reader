@@ -42,6 +42,9 @@ class TabModel {
   /// For text documents, edit mode scroll offset.
   double textEditScrollOffset;
 
+  /// For text documents, current content font size.
+  double textFontSize;
+
   /// For PDFs, current page number.
   int pdfCurrentPage;
 
@@ -66,6 +69,7 @@ class TabModel {
     this.textSearchQuery = '',
     this.textReadScrollOffset = 0,
     this.textEditScrollOffset = 0,
+    this.textFontSize = 18,
     this.pdfCurrentPage = 1,
     this.showPdfThumbnails = false,
     this.showPdfSearch = false,
