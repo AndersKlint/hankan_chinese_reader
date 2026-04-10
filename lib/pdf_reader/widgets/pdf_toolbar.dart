@@ -19,6 +19,10 @@ class PdfToolbar extends StatelessWidget {
   final VoidCallback onZoomOut;
   final VoidCallback onZoomIn;
   final bool canZoom;
+  final bool ocrEnabled;
+  final bool canToggleOcr;
+  final ValueChanged<bool> onOcrChanged;
+  final bool showOcrProgress;
 
   const PdfToolbar({
     super.key,
@@ -36,12 +40,18 @@ class PdfToolbar extends StatelessWidget {
     required this.onZoomOut,
     required this.onZoomIn,
     this.canZoom = false,
+    required this.ocrEnabled,
+    required this.canToggleOcr,
+    required this.onOcrChanged,
+    this.showOcrProgress = false,
     this.onSearchChanged,
   });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final inactiveOcrColor = colorScheme.onSurfaceVariant;
+    final activeOcrColor = colorScheme.onSurface;
 
     return Container(
       height: 40,
@@ -96,6 +106,24 @@ class PdfToolbar extends StatelessWidget {
             tooltip: 'Zoom in (Ctrl + Plus)',
             onPressed: canZoom ? onZoomIn : null,
             visualDensity: VisualDensity.compact,
+          ),
+
+          const VerticalDivider(width: 1, indent: 8, endIndent: 8),
+
+          Tooltip(
+            message: 'Toggle OCR dictionary lookup',
+            child: TextButton(
+              onPressed: canToggleOcr ? () => onOcrChanged(!ocrEnabled) : null,
+              style: TextButton.styleFrom(
+                foregroundColor: ocrEnabled ? activeOcrColor : inactiveOcrColor,
+                textStyle: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  fontWeight: ocrEnabled ? FontWeight.w600 : FontWeight.w400,
+                ),
+                minimumSize: const Size(48, 30),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+              child: const Text('OCR'),
+            ),
           ),
 
           const Spacer(),

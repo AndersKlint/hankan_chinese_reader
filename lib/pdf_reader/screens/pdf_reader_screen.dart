@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'dart:math' as math;
+import 'package:chinese_popup_dict/chinese_popup_dict.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:hankan_chinese_reader/core/service_locator.dart';
 import 'package:hankan_chinese_reader/core/services/tab_service.dart';
+import 'package:hankan_chinese_reader/pdf_reader/services/pdf_ocr_service.dart';
 import 'package:hankan_chinese_reader/pdf_reader/widgets/pdf_text_overlay.dart';
 import 'package:hankan_chinese_reader/pdf_reader/widgets/pdf_toolbar.dart';
 import 'package:hankan_chinese_reader/pdf_reader/widgets/pdf_thumbnail_sidebar.dart';
@@ -24,6 +26,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   final GlobalKey _pdfViewerKey = GlobalKey();
   PdfTextSearcher? _textSearcher;
   late final TabService _tabService;
+  late final PdfOcrService _pdfOcrService;
 
   String? _filePath;
   int _currentPage = 1;
@@ -31,6 +34,10 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
 
   bool _showThumbnails = false;
   bool _showSearchBar = false;
+  bool? _ocrEnabled;
+  final Map<int, bool> _pageHasTextLayer = {};
+  bool _isPerformingOcrLookup = false;
+  bool _hasRequestedOcrWarmUp = false;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
 
@@ -41,11 +48,13 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   void initState() {
     super.initState();
     _tabService = getIt<TabService>();
+    _pdfOcrService = getIt<PdfOcrService>();
     final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
     _filePath = tab.filePath;
     _currentPage = tab.pdfCurrentPage;
     _showThumbnails = tab.showPdfThumbnails;
     _showSearchBar = tab.showPdfSearch;
+    _ocrEnabled = tab.pdfOcrEnabled;
     _searchController.text = tab.pdfSearchQuery;
 
     _pdfController.addListener(_onPdfStateChanged);
@@ -99,6 +108,105 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
     tab.showPdfSearch = _showSearchBar;
     tab.pdfSearchQuery = _showSearchBar ? _searchController.text : '';
     _tabService.notifyTabStateChanged();
+  }
+
+  bool get _isCurrentPageMissingTextLayer =>
+      _pageHasTextLayer[_currentPage] == false;
+
+  bool get _isOcrEnabled =>
+      _ocrEnabled ??
+      (_pdfOcrService.isSupported && _isCurrentPageMissingTextLayer);
+
+  void _setOcrEnabled(bool enabled) {
+    setState(() {
+      _ocrEnabled = enabled;
+    });
+
+    if (enabled) {
+      _warmUpOcr();
+    }
+
+    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
+    tab.pdfOcrEnabled = enabled;
+    _tabService.notifyTabStateChanged();
+  }
+
+  void _warmUpOcr() {
+    if (_hasRequestedOcrWarmUp || !_pdfOcrService.isSupported) {
+      return;
+    }
+    _hasRequestedOcrWarmUp = true;
+    _pdfOcrService.warmUp();
+  }
+
+  void _onPageTextLayerDetected(int pageNumber, bool hasTextLayer) {
+    final previous = _pageHasTextLayer[pageNumber];
+    if (previous == hasTextLayer) {
+      return;
+    }
+
+    _pageHasTextLayer[pageNumber] = hasTextLayer;
+    if (_ocrEnabled == null && !hasTextLayer) {
+      _warmUpOcr();
+    }
+    if (_ocrEnabled == null && mounted && pageNumber == _currentPage) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _handlePdfTap(
+    BuildContext context,
+    PdfPageHitTestResult hit,
+  ) async {
+    if (!_pdfOcrService.isSupported ||
+        !_isOcrEnabled ||
+        _isPerformingOcrLookup) {
+      return;
+    }
+
+    setState(() {
+      _isPerformingOcrLookup = true;
+    });
+    try {
+      ChinesePopupDict.hideActivePopup();
+
+      final lookup = await _pdfOcrService.lookupAtPoint(
+        page: hit.page,
+        pagePoint: hit.offset,
+      );
+      if (!mounted || !context.mounted || lookup == null) {
+        return;
+      }
+
+      final anchorRectInDocument = _pdfController.calcRectForRectInsidePage(
+        pageNumber: hit.page.pageNumber,
+        rect: lookup.targetRectOnPage,
+      );
+      final globalTopLeft = _pdfController.documentToGlobal(
+        anchorRectInDocument.topLeft,
+      );
+      final globalBottomRight = _pdfController.documentToGlobal(
+        anchorRectInDocument.bottomRight,
+      );
+      if (globalTopLeft == null || globalBottomRight == null) {
+        return;
+      }
+
+      ChinesePopupDict.showPopupForText(
+        context: context,
+        text: lookup.text,
+        charIndex: lookup.charIndex,
+        globalTargetRect: Rect.fromPoints(globalTopLeft, globalBottomRight),
+      );
+    } finally {
+      if (!mounted) {
+        _isPerformingOcrLookup = false;
+      } else {
+        setState(() {
+          _isPerformingOcrLookup = false;
+        });
+      }
+    }
   }
 
   void _activateSearch() {
@@ -256,143 +364,216 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
       child: Focus(
         autofocus: true,
         onKeyEvent: (_, event) => _handleKeyEvent(event),
-        child: Column(
-          children: [
-            PdfToolbar(
-              showThumbnails: _showThumbnails,
-              onToggleThumbnails: () {
-                setState(() => _showThumbnails = !_showThumbnails);
-                final tab = _tabService.tabs.value.firstWhere(
-                  (t) => t.id == widget.tabId,
-                );
-                tab.showPdfThumbnails = _showThumbnails;
-                _tabService.notifyTabStateChanged();
-              },
-              showSearchBar: _showSearchBar,
-              onActivateSearch: _activateSearch,
-              onCloseSearch: () => _setShowSearch(false),
-              searchController: _searchController,
-              searchFocusNode: _searchFocusNode,
-              textSearcher: _textSearcher,
-              currentPage: _currentPage,
-              pageCount: _pageCount,
-              onPageSubmitted: _jumpToPage,
-              onZoomIn: _zoomIn,
-              onZoomOut: _zoomOut,
-              canZoom: _pdfController.isReady,
-              onSearchChanged: (value) {
-                final tab = _tabService.tabs.value.firstWhere(
-                  (t) => t.id == widget.tabId,
-                );
-                tab.pdfSearchQuery = value;
-              },
-            ),
-            Expanded(
-              child: Row(
+        child: MouseRegion(
+          cursor: _isPerformingOcrLookup
+              ? SystemMouseCursors.progress
+              : MouseCursor.defer,
+          child: Stack(
+            children: [
+              Column(
                 children: [
-                  if (_showThumbnails)
-                    PdfThumbnailSidebar(
-                      filePath: _filePath!,
-                      currentPage: _currentPage,
-                      onPageTapped: _jumpToPage,
-                    ),
+                  PdfToolbar(
+                    showThumbnails: _showThumbnails,
+                    onToggleThumbnails: () {
+                      setState(() => _showThumbnails = !_showThumbnails);
+                      final tab = _tabService.tabs.value.firstWhere(
+                        (t) => t.id == widget.tabId,
+                      );
+                      tab.showPdfThumbnails = _showThumbnails;
+                      _tabService.notifyTabStateChanged();
+                    },
+                    showSearchBar: _showSearchBar,
+                    onActivateSearch: _activateSearch,
+                    onCloseSearch: () => _setShowSearch(false),
+                    searchController: _searchController,
+                    searchFocusNode: _searchFocusNode,
+                    textSearcher: _textSearcher,
+                    currentPage: _currentPage,
+                    pageCount: _pageCount,
+                    onPageSubmitted: _jumpToPage,
+                    onZoomIn: _zoomIn,
+                    onZoomOut: _zoomOut,
+                    canZoom: _pdfController.isReady,
+                    ocrEnabled: _isOcrEnabled,
+                    canToggleOcr: _pdfOcrService.isSupported,
+                    onOcrChanged: _setOcrEnabled,
+                    showOcrProgress: _isPerformingOcrLookup,
+                    onSearchChanged: (value) {
+                      final tab = _tabService.tabs.value.firstWhere(
+                        (t) => t.id == widget.tabId,
+                      );
+                      tab.pdfSearchQuery = value;
+                    },
+                  ),
                   Expanded(
-                    child: Listener(
-                      onPointerSignal: _onPointerSignal,
-                      onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
-                      child: RepaintBoundary(
-                        key: _pdfViewerKey,
-                        child: PdfViewer.file(
-                          _filePath!,
-                          controller: _pdfController,
-                          params: PdfViewerParams(
-                            scrollByMouseWheel: 0.1,
-                            onViewerReady: (document, controller) {
-                              setState(() {
-                                _textSearcher = PdfTextSearcher(_pdfController);
-                              });
+                    child: Row(
+                      children: [
+                        if (_showThumbnails)
+                          PdfThumbnailSidebar(
+                            filePath: _filePath!,
+                            currentPage: _currentPage,
+                            onPageTapped: _jumpToPage,
+                          ),
+                        Expanded(
+                          child: Listener(
+                            onPointerSignal: _onPointerSignal,
+                            onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
+                            child: RepaintBoundary(
+                              key: _pdfViewerKey,
+                              child: PdfViewer.file(
+                                _filePath!,
+                                controller: _pdfController,
+                                params: PdfViewerParams(
+                                  scrollByMouseWheel: 0.1,
+                                  onViewerReady: (document, controller) {
+                                    setState(() {
+                                      _textSearcher = PdfTextSearcher(
+                                        _pdfController,
+                                      );
+                                    });
 
-                              final tab = _tabService.tabs.value.firstWhere(
-                                (t) => t.id == widget.tabId,
-                              );
-                              final targetPage = tab.pdfCurrentPage.clamp(
-                                1,
-                                document.pages.length,
-                              );
-                              if (targetPage != 1) {
-                                _pdfController.goToPage(
-                                  pageNumber: targetPage,
-                                  duration: Duration.zero,
-                                );
-                              }
-                              if (_showSearchBar &&
-                                  tab.pdfSearchQuery.isNotEmpty) {
-                                _textSearcher?.startTextSearch(
-                                  tab.pdfSearchQuery,
-                                );
-                                _activateSearch();
-                              }
-                            },
-                            onPageChanged: (pageNumber) {
-                              if (pageNumber != null &&
-                                  pageNumber != _currentPage) {
-                                setState(() => _currentPage = pageNumber);
-                                final tab = _tabService.tabs.value.firstWhere(
-                                  (t) => t.id == widget.tabId,
-                                );
-                                tab.pdfCurrentPage = pageNumber;
-                              }
-                            },
-                            textSelectionParams: const PdfTextSelectionParams(
-                              enabled: true,
-                            ),
-                            pageOverlaysBuilder: (context, pageRect, page) {
-                              return [
-                                PdfTextOverlay(page: page, pageRect: pageRect),
-                              ];
-                            },
-                            viewerOverlayBuilder:
-                                (context, size, handleLinkTap) => [
-                                  PdfViewerScrollThumb(
-                                    controller: _pdfController,
-                                    orientation: ScrollbarOrientation.right,
-                                    margin: 6,
-                                    thumbSize: const Size(10, 64),
-                                    thumbBuilder:
-                                        (
-                                          context,
-                                          thumbSize,
-                                          pageNumber,
-                                          controller,
-                                        ) {
-                                          return DecoratedBox(
-                                            decoration: BoxDecoration(
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .primary
-                                                  .withValues(alpha: 0.75),
-                                              borderRadius:
-                                                  BorderRadius.circular(
-                                                    thumbSize.width / 2,
-                                                  ),
-                                            ),
+                                    final tab = _tabService.tabs.value
+                                        .firstWhere(
+                                          (t) => t.id == widget.tabId,
+                                        );
+                                    final targetPage = tab.pdfCurrentPage.clamp(
+                                      1,
+                                      document.pages.length,
+                                    );
+                                    if (targetPage != 1) {
+                                      _pdfController.goToPage(
+                                        pageNumber: targetPage,
+                                        duration: Duration.zero,
+                                      );
+                                    }
+                                    if (_showSearchBar &&
+                                        tab.pdfSearchQuery.isNotEmpty) {
+                                      _textSearcher?.startTextSearch(
+                                        tab.pdfSearchQuery,
+                                      );
+                                      _activateSearch();
+                                    }
+                                  },
+                                  onPageChanged: (pageNumber) {
+                                    if (pageNumber != null &&
+                                        pageNumber != _currentPage) {
+                                      setState(() => _currentPage = pageNumber);
+                                      final tab = _tabService.tabs.value
+                                          .firstWhere(
+                                            (t) => t.id == widget.tabId,
                                           );
-                                        },
-                                  ),
-                                ],
-                            pagePaintCallbacks: [
-                              if (_textSearcher != null)
-                                _textSearcher!.pageTextMatchPaintCallback,
-                            ],
+                                      tab.pdfCurrentPage = pageNumber;
+                                    }
+                                  },
+                                  textSelectionParams:
+                                      const PdfTextSelectionParams(
+                                        enabled: true,
+                                      ),
+                                  onGeneralTap: (context, controller, details) {
+                                    if (details.type !=
+                                        PdfViewerGeneralTapType.tap) {
+                                      return false;
+                                    }
+                                    if (!_isOcrEnabled) {
+                                      return false;
+                                    }
+                                    if (details.tapOn ==
+                                        PdfViewerPart.selectedText) {
+                                      return false;
+                                    }
+
+                                    final hit = _pdfController
+                                        .getPdfPageHitTestResult(
+                                          details.documentPosition,
+                                          useDocumentLayoutCoordinates: true,
+                                        );
+                                    if (hit == null) {
+                                      return false;
+                                    }
+
+                                    _handlePdfTap(context, hit);
+                                    return true;
+                                  },
+                                  pageOverlaysBuilder:
+                                      (context, pageRect, page) {
+                                        return [
+                                          PdfTextOverlay(
+                                            page: page,
+                                            pageRect: pageRect,
+                                            enabled: !_isOcrEnabled,
+                                            onTextLayerDetected:
+                                                (hasTextLayer) {
+                                                  _onPageTextLayerDetected(
+                                                    page.pageNumber,
+                                                    hasTextLayer,
+                                                  );
+                                                },
+                                          ),
+                                        ];
+                                      },
+                                  viewerOverlayBuilder:
+                                      (context, size, handleLinkTap) => [
+                                        PdfViewerScrollThumb(
+                                          controller: _pdfController,
+                                          orientation:
+                                              ScrollbarOrientation.right,
+                                          margin: 6,
+                                          thumbSize: const Size(10, 64),
+                                          thumbBuilder:
+                                              (
+                                                context,
+                                                thumbSize,
+                                                pageNumber,
+                                                controller,
+                                              ) {
+                                                return DecoratedBox(
+                                                  decoration: BoxDecoration(
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .primary
+                                                        .withValues(
+                                                          alpha: 0.75,
+                                                        ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          thumbSize.width / 2,
+                                                        ),
+                                                  ),
+                                                );
+                                              },
+                                        ),
+                                      ],
+                                  pagePaintCallbacks: [
+                                    if (_textSearcher != null)
+                                      _textSearcher!.pageTextMatchPaintCallback,
+                                  ],
+                                ),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
                 ],
               ),
-            ),
-          ],
+              Positioned(
+                top: 40,
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  child: AnimatedOpacity(
+                    opacity: _isPerformingOcrLookup ? 1 : 0,
+                    duration: const Duration(milliseconds: 120),
+                    child: const SizedBox(
+                      height: 3,
+                      child: LinearProgressIndicator(),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -7,8 +7,16 @@ import 'package:chinese_popup_dict/chinese_popup_dict.dart';
 class PdfTextOverlay extends StatefulWidget {
   final PdfPage page;
   final Rect pageRect;
+  final bool enabled;
+  final ValueChanged<bool>? onTextLayerDetected;
 
-  const PdfTextOverlay({super.key, required this.page, required this.pageRect});
+  const PdfTextOverlay({
+    super.key,
+    required this.page,
+    required this.pageRect,
+    this.enabled = true,
+    this.onTextLayerDetected,
+  });
 
   @override
   State<PdfTextOverlay> createState() => _PdfTextOverlayState();
@@ -89,6 +97,7 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
           _isLoading = false;
           _hasCalculatedText = true;
         });
+        widget.onTextLayerDetected?.call(text.fragments.isNotEmpty);
       }
     } catch (e) {
       if (mounted && _loadingPageNumber == pageNumber) {
@@ -96,6 +105,7 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
           _isLoading = false;
           _hasCalculatedText = true;
         });
+        widget.onTextLayerDetected?.call(false);
       }
     }
   }
@@ -108,6 +118,10 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
 
     if (_hasCalculatedText &&
         (_pageText == null || _pageText!.fragments.isEmpty)) {
+      if (!widget.enabled) {
+        return const SizedBox.shrink();
+      }
+
       // Empty text layer or failed to extract.
       return Align(
         alignment: Alignment.bottomRight,
@@ -127,6 +141,9 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
     }
 
     if (_pageText == null) return const SizedBox.shrink();
+    if (!widget.enabled) {
+      return const SizedBox.shrink();
+    }
 
     return Stack(
       children: _pageText!.fragments.map((fragment) {

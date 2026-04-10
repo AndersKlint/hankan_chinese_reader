@@ -57,6 +57,10 @@ class TabModel {
   /// For PDFs, current search query.
   String pdfSearchQuery;
 
+  /// For PDFs, explicit OCR mode override. When null, current-page text
+  /// availability decides whether OCR starts enabled.
+  bool? pdfOcrEnabled;
+
   TabModel({
     required this.id,
     required this.title,
@@ -74,5 +78,6 @@ class TabModel {
     this.showPdfThumbnails = false,
     this.showPdfSearch = false,
     this.pdfSearchQuery = '',
+    this.pdfOcrEnabled,
   });
 }
