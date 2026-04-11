@@ -12,8 +12,8 @@ dependencies:
   cupertino_icons: ^1.0.8
   chinese_popup_dict:
     path: ../chinese_popup_dict
-  mobile_ocr:
-    path: ../mobile_ocr
+  dart_paddle_ocr:
+    path: ../dart_paddle_ocr
   get_it: ^9.0.0
   watch_it: ^2.4.2
   pdfrx: ^2.2.0

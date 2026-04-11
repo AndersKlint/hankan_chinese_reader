@@ -1,8 +1,9 @@
 import 'dart:ui';
 
+import 'package:dart_paddle_ocr/dart_paddle_ocr_plugin.dart';
+import 'package:dart_paddle_ocr/models/text_block.dart';
 import 'package:image/image.dart' as img;
 import 'package:logging/logging.dart';
-import 'package:mobile_ocr/mobile_ocr.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 /// Performs targeted OCR on PDF page crops for tap-driven dictionary lookups.
@@ -19,14 +20,14 @@ class PdfOcrService {
   /// Scale factor for rendering the crop region (higher = more detail for OCR).
   static const double _renderScale = 1.2;
 
-  final MobileOcr _mobileOcr = MobileOcr();
+  final DartPaddleOcr _dartPaddleOcr = DartPaddleOcr();
   final Logger _logger = Logger('PdfOcrService');
   Future<void>? _warmUpFuture;
 
   bool get isSupported => true;
 
   Future<void> warmUp() {
-    return _warmUpFuture ??= _mobileOcr.prepareModels().then((_) {});
+    return _warmUpFuture ??= _dartPaddleOcr.prepareModels().then((_) {});
   }
 
   Future<PdfOcrLookup?> lookupAtPoint({
@@ -105,7 +106,7 @@ class PdfOcrService {
         order: img.ChannelOrder.bgra,
       );
 
-      final blocks = await _mobileOcr.detectTextFromImage(
+      final blocks = await _dartPaddleOcr.detectTextFromImage(
         image: image,
         trimRecognitionWhitespace: false,
         enhanceRecognitionCrops: false,

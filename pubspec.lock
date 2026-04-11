@@ -104,6 +104,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.8"
+  dart_paddle_ocr:
+    dependency: "direct main"
+    description:
+      path: "../dart_paddle_ocr"
+      relative: true
+    source: path
+    version: "0.0.1"
   fake_async:
     dependency: transitive
     description:
@@ -191,22 +198,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.3.3"
-  google_mlkit_commons:
-    dependency: transitive
-    description:
-      name: google_mlkit_commons
-      sha256: "3e69fea4211727732cc385104e675ad1e40b29f12edd492ee52fa108423a6124"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.11.1"
-  google_mlkit_translation:
-    dependency: transitive
-    description:
-      name: google_mlkit_translation
-      sha256: "5cb1c156d926cb5f4795674835d9df480366e002a3a7e17729d2ee472aed11ae"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.13.1"
   hooks:
     dependency: transitive
     description:
@@ -327,13 +318,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.17.0"
-  mobile_ocr:
-    dependency: "direct main"
-    description:
-      path: "../mobile_ocr"
-      relative: true
-    source: path
-    version: "1.0.0"
   native_toolchain_c:
     dependency: transitive
     description:
