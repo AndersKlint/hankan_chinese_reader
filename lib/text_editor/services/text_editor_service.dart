@@ -17,8 +17,11 @@ class TextEditorService {
   final Queue<String> _redoStack = Queue<String>();
 
   String _savedContent = '';
+  DateTime? _typingBurstStartedAt;
+  DateTime? _lastTypingEditAt;
 
-  static const int _maxUndoHistory = 100;
+  static const int _maxUndoHistory = 500;
+  static const Duration _typingUndoMergeWindow = Duration(milliseconds: 800);
 
   /// Initializes the service with the given [text].
   void initialize(String text, {required bool isReadMode}) {
@@ -28,15 +31,86 @@ class TextEditorService {
     this.isReadMode.value = isReadMode;
     _undoStack.clear();
     _redoStack.clear();
+    _resetTypingUndoCoalescing();
   }
 
-  /// Records a text change. Call before updating content for undo support.
-  void pushUndoState() {
-    _undoStack.addLast(content.value);
+  /// Applies a user edit and records undo history.
+  ///
+  /// Rapid single-character insertions are merged into one undo step so normal
+  /// typing behaves more like a desktop editor. Other edits, such as paste,
+  /// deletion, or replacement, always create their own undo step.
+  void applyUserEdit(String text, {DateTime? timestamp}) {
+    final previousText = content.value;
+    if (text == previousText) {
+      return;
+    }
+
+    final editTime = timestamp ?? DateTime.now();
+    final isTypingInsertion = _isSingleCharacterInsertion(previousText, text);
+    final shouldMergeIntoPreviousTyping =
+        isTypingInsertion && _shouldMergeTypingUndo(editTime);
+
+    if (!shouldMergeIntoPreviousTyping) {
+      _pushUndoState(previousText);
+    } else {
+      _redoStack.clear();
+    }
+
+    updateContent(text);
+    if (isTypingInsertion) {
+      if (!shouldMergeIntoPreviousTyping) {
+        _typingBurstStartedAt = editTime;
+      }
+      _lastTypingEditAt = editTime;
+    } else {
+      _resetTypingUndoCoalescing();
+    }
+  }
+
+  void _pushUndoState(String text) {
+    _undoStack.addLast(text);
     if (_undoStack.length > _maxUndoHistory) {
       _undoStack.removeFirst();
     }
     _redoStack.clear();
+  }
+
+  bool _shouldMergeTypingUndo(DateTime editTime) {
+    final typingBurstStartedAt = _typingBurstStartedAt;
+    final lastTypingEditAt = _lastTypingEditAt;
+    if (typingBurstStartedAt == null || lastTypingEditAt == null) {
+      return false;
+    }
+    return editTime.difference(lastTypingEditAt) <= _typingUndoMergeWindow &&
+        editTime.difference(typingBurstStartedAt) <= _typingUndoMergeWindow;
+  }
+
+  bool _isSingleCharacterInsertion(String previousText, String nextText) {
+    if (nextText.length != previousText.length + 1) {
+      return false;
+    }
+
+    var prefixLength = 0;
+    while (prefixLength < previousText.length &&
+        previousText.codeUnitAt(prefixLength) ==
+            nextText.codeUnitAt(prefixLength)) {
+      prefixLength++;
+    }
+
+    final suffixLength = previousText.length - prefixLength;
+    for (var index = 0; index < suffixLength; index++) {
+      if (previousText.codeUnitAt(previousText.length - 1 - index) !=
+          nextText.codeUnitAt(nextText.length - 1 - index)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  void _resetTypingUndoCoalescing() {
+    _typingBurstStartedAt = null;
+    _lastTypingEditAt = null;
   }
 
   /// Updates the current text content and marks as modified.
@@ -54,6 +128,7 @@ class TextEditorService {
   /// Undoes the last change.
   void undo() {
     if (!canUndo) return;
+    _resetTypingUndoCoalescing();
     _redoStack.addLast(content.value);
     content.value = _undoStack.removeLast();
     isModified.value = content.value != _savedContent;
@@ -62,6 +137,7 @@ class TextEditorService {
   /// Redoes the previously undone change.
   void redo() {
     if (!canRedo) return;
+    _resetTypingUndoCoalescing();
     _undoStack.addLast(content.value);
     content.value = _redoStack.removeLast();
     isModified.value = content.value != _savedContent;

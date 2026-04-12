@@ -503,8 +503,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
                         highlightedSelection: _activeSelection,
                         fontSize: _fontSize,
                         onChanged: (text) {
-                          _editorService.pushUndoState();
-                          _editorService.updateContent(text);
+                          _editorService.applyUserEdit(text);
                           // Keep tab model in sync.
                           _tab.textContent = text;
                           if (_searchQuery.isNotEmpty) {
