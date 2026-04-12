@@ -21,6 +21,9 @@ class TextReadView extends StatelessWidget {
   /// Scroll controller from parent for state persistence and jump-to-match.
   final ScrollController scrollController;
 
+  /// Scroll physics for the reader scroll view.
+  final ScrollPhysics? scrollPhysics;
+
   /// Key of the active match to scroll into view.
   final GlobalKey? activeMatchKey;
 
@@ -34,6 +37,7 @@ class TextReadView extends StatelessWidget {
     required this.matches,
     required this.activeMatchIndex,
     required this.scrollController,
+    this.scrollPhysics,
     required this.fontSize,
     this.activeMatchKey,
   });
@@ -115,6 +119,7 @@ class TextReadView extends StatelessWidget {
         builder: (context, constraints) {
           return SingleChildScrollView(
             controller: scrollController,
+            physics: scrollPhysics,
             padding: textEditorContentPadding,
             child: ConstrainedBox(
               constraints: BoxConstraints(

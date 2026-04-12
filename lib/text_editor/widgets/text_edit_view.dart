@@ -12,6 +12,9 @@ class TextEditView extends StatefulWidget {
   /// Persisted editor scroll controller.
   final ScrollController scrollController;
 
+  /// Scroll physics used by the inner editable scroll view.
+  final ScrollPhysics? scrollPhysics;
+
   /// Focus node used to reveal active search hit in view.
   final FocusNode focusNode;
 
@@ -26,6 +29,7 @@ class TextEditView extends StatefulWidget {
     required this.initialText,
     required this.onChanged,
     required this.scrollController,
+    this.scrollPhysics,
     required this.focusNode,
     required this.fontSize,
     this.highlightedSelection,
@@ -119,6 +123,7 @@ class _TextEditViewState extends State<TextEditView> {
             controller: _controller,
             focusNode: widget.focusNode,
             scrollController: widget.scrollController,
+            scrollPhysics: widget.scrollPhysics,
             maxLines: null,
             expands: true,
             cursorColor: colorScheme.primary,

@@ -41,6 +41,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
   int _currentMatchIndex = -1;
   GlobalKey? _activeMatchKey;
   late double _fontSize;
+  bool _isControlPressed = false;
 
   static const double _zoomStep = 1.1;
   static const double _scrollZoomSensitivity = 0.002;
@@ -179,6 +180,67 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
     final zoomDirection = event.scrollDelta.dy + event.scrollDelta.dx;
     final factor = math.exp(-zoomDirection * _scrollZoomSensitivity);
     _zoomByFactor(factor);
+  }
+
+  void _syncModifierState() {
+    final isControlPressed = HardwareKeyboard.instance.isControlPressed;
+    if (_isControlPressed == isControlPressed) {
+      return;
+    }
+
+    setState(() => _isControlPressed = isControlPressed);
+  }
+
+  KeyEventResult _handleKeyEvent(KeyEvent event) {
+    _syncModifierState();
+    return KeyEventResult.ignored;
+  }
+
+  ScrollPhysics get _contentScrollPhysics => _isControlPressed
+      ? const NeverScrollableScrollPhysics()
+      : const ClampingScrollPhysics();
+
+  double _currentScrollProgress({required bool isReadMode}) {
+    final controller = isReadMode
+        ? _readScrollController
+        : _editScrollController;
+    if (!controller.hasClients) {
+      return 0;
+    }
+
+    final maxScrollExtent = controller.position.maxScrollExtent;
+    if (maxScrollExtent <= 0) {
+      return 0;
+    }
+
+    return (controller.offset / maxScrollExtent).clamp(0.0, 1.0);
+  }
+
+  void _restoreScrollProgress({
+    required bool isReadMode,
+    required double progress,
+  }) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      final controller = isReadMode
+          ? _readScrollController
+          : _editScrollController;
+      if (!controller.hasClients) {
+        return;
+      }
+
+      final maxScrollExtent = controller.position.maxScrollExtent;
+      final targetOffset = (progress * maxScrollExtent).clamp(
+        0.0,
+        maxScrollExtent,
+      );
+      controller.jumpTo(targetOffset);
+      _tab.textReadScrollOffset = targetOffset;
+      _tab.textEditScrollOffset = targetOffset;
+    });
   }
 
   void _onPointerPanZoomUpdate(PointerPanZoomUpdateEvent event) {
@@ -387,6 +449,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
       },
       child: Focus(
         autofocus: true,
+        onKeyEvent: (_, event) => _handleKeyEvent(event),
         child: Column(
           children: [
             // Toolbar
@@ -428,12 +491,14 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
                         matches: _matches,
                         activeMatchIndex: _currentMatchIndex,
                         scrollController: _readScrollController,
+                        scrollPhysics: _contentScrollPhysics,
                         activeMatchKey: _activeMatchKey,
                         fontSize: _fontSize,
                       )
                     : TextEditView(
                         initialText: content,
                         scrollController: _editScrollController,
+                        scrollPhysics: _contentScrollPhysics,
                         focusNode: _editFocusNode,
                         highlightedSelection: _activeSelection,
                         fontSize: _fontSize,
@@ -456,9 +521,18 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
   }
 
   void _toggleMode() {
+    final nextIsReadMode = !_editorService.isReadMode.value;
+    final scrollProgress = _currentScrollProgress(
+      isReadMode: _editorService.isReadMode.value,
+    );
+
     _editorService.toggleReadMode();
     _tab.isReadMode = _editorService.isReadMode.value;
     _tabService.notifyTabStateChanged();
+    _restoreScrollProgress(
+      isReadMode: nextIsReadMode,
+      progress: scrollProgress,
+    );
     _scrollToActiveMatch();
   }
 
