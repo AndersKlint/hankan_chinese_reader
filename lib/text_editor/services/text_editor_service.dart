@@ -77,4 +77,14 @@ class TextEditorService {
   void toggleReadMode() {
     isReadMode.value = !isReadMode.value;
   }
+
+  /// Releases resources held by this service.
+  ///
+  /// Must be called when the owning widget is disposed to prevent
+  /// [ValueNotifier] listener leaks.
+  void dispose() {
+    content.dispose();
+    isModified.dispose();
+    isReadMode.dispose();
+  }
 }

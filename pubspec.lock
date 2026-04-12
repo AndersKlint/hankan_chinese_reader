@@ -33,6 +33,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.2"
+  change_case:
+    dependency: transitive
+    description:
+      name: change_case
+      sha256: e41ef3df58521194ef8d7649928954805aeb08061917cf658322305e61568003
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.0"
   characters:
     dependency: transitive
     description:
@@ -111,6 +119,14 @@ packages:
       relative: true
     source: path
     version: "0.0.1"
+  dartcv4:
+    dependency: transitive
+    description:
+      name: dartcv4
+      sha256: "5764d13550055da3bb35ca28e6866b837579dfb4b594582b7a7753785ca5dfef"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.1+4"
   fake_async:
     dependency: transitive
     description:
@@ -326,6 +342,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.17.6"
+  native_toolchain_cmake:
+    dependency: transitive
+    description:
+      name: native_toolchain_cmake
+      sha256: cd4865568c57f03c7ab1f138cc5032c5f77825d27083d6f5a3e9bbb3e8014a87
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.5"
   objective_c:
     dependency: transitive
     description:
@@ -342,6 +366,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.23.2+2"
+  opencv_dart:
+    dependency: transitive
+    description:
+      name: opencv_dart
+      sha256: b50ea4788e6d61df6369874e0244445d98ef9210dbb90b8d3c1df198b4ee2333
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.1+4"
   path:
     dependency: transitive
     description:

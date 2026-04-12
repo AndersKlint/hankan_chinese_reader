@@ -2,13 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// Application theme configuration using Material 3.
+///
+/// Theme data is computed once and cached to avoid rebuilding
+/// [ColorScheme.fromSeed], [GoogleFonts] text themes, and [ThemeData] on
+/// every access.
 class AppTheme {
   AppTheme._();
 
   static const _seedColor = Color(0xFF1A73E8);
 
-  /// Light theme.
-  static ThemeData get light {
+  /// Light theme (cached).
+  static final ThemeData light = _buildLight();
+
+  /// Dark theme (cached).
+  static final ThemeData dark = _buildDark();
+
+  static ThemeData _buildLight() {
     final baseColorScheme = ColorScheme.fromSeed(
       seedColor: _seedColor,
       brightness: Brightness.light,
@@ -19,8 +28,7 @@ class AppTheme {
     return _buildTheme(colorScheme);
   }
 
-  /// Dark theme.
-  static ThemeData get dark {
+  static ThemeData _buildDark() {
     final baseColorScheme = ColorScheme.fromSeed(
       seedColor: _seedColor,
       brightness: Brightness.dark,

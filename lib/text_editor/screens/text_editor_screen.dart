@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:watch_it/watch_it.dart';
+import 'package:hankan_chinese_reader/core/models/tab_model.dart';
 import 'package:hankan_chinese_reader/core/service_locator.dart';
 import 'package:hankan_chinese_reader/core/services/file_service.dart';
 import 'package:hankan_chinese_reader/core/services/tab_service.dart';
@@ -28,6 +29,7 @@ class TextEditorScreen extends WatchingStatefulWidget {
 class _TextEditorScreenState extends State<TextEditorScreen> {
   late final TextEditorService _editorService;
   late final TabService _tabService;
+  late final FileService _fileService;
   late final ScrollController _readScrollController;
   late final ScrollController _editScrollController;
   late final FocusNode _editFocusNode;
@@ -43,13 +45,18 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
   static const double _zoomStep = 1.1;
   static const double _scrollZoomSensitivity = 0.002;
 
+  /// Convenience accessor to avoid repeated [TabService.findTab] calls
+  /// within a single synchronous scope.
+  TabModel get _tab => _tabService.findTab(widget.tabId);
+
   @override
   void initState() {
     super.initState();
     _editorService = TextEditorService();
     _tabService = getIt<TabService>();
+    _fileService = getIt<FileService>();
 
-    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
+    final tab = _tab;
     _readScrollController = ScrollController(
       initialScrollOffset: tab.textReadScrollOffset,
     );
@@ -86,22 +93,20 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
     _editScrollController.dispose();
     _editFocusNode.dispose();
     _searchFocusNode.dispose();
+    _editorService.dispose();
     super.dispose();
   }
 
   void _persistReadScrollOffset() {
-    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
-    tab.textReadScrollOffset = _readScrollController.offset;
+    _tab.textReadScrollOffset = _readScrollController.offset;
   }
 
   void _persistEditScrollOffset() {
-    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
-    tab.textEditScrollOffset = _editScrollController.offset;
+    _tab.textEditScrollOffset = _editScrollController.offset;
   }
 
   void _onModifiedChanged() {
-    final tabService = getIt<TabService>();
-    tabService.setModified(
+    _tabService.setModified(
       widget.tabId,
       modified: _editorService.isModified.value,
     );
@@ -117,7 +122,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
         _activeMatchKey = null;
       }
     });
-    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
+    final tab = _tab;
     tab.showTextSearch = show;
     if (!show) {
       tab.textSearchQuery = '';
@@ -147,19 +152,18 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
     }
 
     setState(() => _fontSize = nextFontSize);
-    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
-    tab.textFontSize = nextFontSize;
+    _tab.textFontSize = nextFontSize;
     _tabService.notifyTabStateChanged();
   }
 
-  Future<void> _zoomByFactor(double factor, {Offset? localPosition}) async {
+  void _zoomByFactor(double factor, {Offset? localPosition}) {
     _setFontSize(_fontSize * factor);
   }
 
-  Future<void> _zoomIn({Offset? localPosition}) =>
+  void _zoomIn({Offset? localPosition}) =>
       _zoomByFactor(_zoomStep, localPosition: localPosition);
 
-  Future<void> _zoomOut({Offset? localPosition}) =>
+  void _zoomOut({Offset? localPosition}) =>
       _zoomByFactor(1 / _zoomStep, localPosition: localPosition);
 
   void _resetZoom() {
@@ -228,8 +232,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
       return;
     }
     _searchQuery = query;
-    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
-    tab.textSearchQuery = query;
+    _tab.textSearchQuery = query;
     _tabService.notifyTabStateChanged();
     _recomputeSearchMatches(_editorService.content.value, query);
   }
@@ -324,11 +327,9 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
   }
 
   Future<void> _save() async {
-    final tabService = getIt<TabService>();
-    final fileService = getIt<FileService>();
-    final tab = tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
+    final tab = _tab;
 
-    final savedPath = await fileService.saveTextFile(
+    final savedPath = await _fileService.saveTextFile(
       content: _editorService.content.value,
       existingPath: tab.filePath,
     );
@@ -337,7 +338,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
       tab.filePath = savedPath;
       tab.textContent = _editorService.content.value;
       final fileName = savedPath.split('/').last.split('\\').last;
-      tabService.setTitle(widget.tabId, fileName);
+      _tabService.setTitle(widget.tabId, fileName);
       _editorService.markSaved();
     }
   }
@@ -440,11 +441,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
                           _editorService.pushUndoState();
                           _editorService.updateContent(text);
                           // Keep tab model in sync.
-                          final tabService = getIt<TabService>();
-                          final tab = tabService.tabs.value.firstWhere(
-                            (t) => t.id == widget.tabId,
-                          );
-                          tab.textContent = text;
+                          _tab.textContent = text;
                           if (_searchQuery.isNotEmpty) {
                             _recomputeSearchMatches(text, _searchQuery);
                           }
@@ -460,8 +457,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
 
   void _toggleMode() {
     _editorService.toggleReadMode();
-    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
-    tab.isReadMode = _editorService.isReadMode.value;
+    _tab.isReadMode = _editorService.isReadMode.value;
     _tabService.notifyTabStateChanged();
     _scrollToActiveMatch();
   }
@@ -470,9 +466,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
   void didUpdateWidget(covariant TextEditorScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.tabId != widget.tabId) {
-      final tab = _tabService.tabs.value.firstWhere(
-        (t) => t.id == widget.tabId,
-      );
+      final tab = _tab;
       _showSearch = tab.showTextSearch;
       _searchQuery = tab.textSearchQuery;
       _fontSize = tab.textFontSize;

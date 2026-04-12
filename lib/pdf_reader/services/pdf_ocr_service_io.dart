@@ -1,7 +1,6 @@
 import 'dart:ui';
 
 import 'package:dart_paddle_ocr/dart_paddle_ocr_plugin.dart';
-import 'package:dart_paddle_ocr/models/text_block.dart';
 import 'package:image/image.dart' as img;
 import 'package:logging/logging.dart';
 import 'package:pdfrx/pdfrx.dart';

@@ -89,89 +89,54 @@ class _TextEditViewState extends State<TextEditView> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final sidePadding = constraints.maxWidth > 900
-            ? ((constraints.maxWidth - 860) / 2).clamp(24.0, 220.0)
-            : 16.0;
-
-        final isDark = colorScheme.brightness == Brightness.dark;
-        final backgroundSurface = isDark
-            ? colorScheme.surfaceContainerLowest
-            : colorScheme.surfaceContainerLow;
-        final editorSurface = isDark
-            ? colorScheme.surfaceContainerLow
-            : colorScheme.surface;
-
-        return ColoredBox(
-          color: backgroundSurface,
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(sidePadding, 16, sidePadding, 16),
-            child: Container(
-              decoration: BoxDecoration(
-                color: editorSurface,
-                borderRadius: BorderRadius.circular(textEditorSurfaceRadius),
-                border: Border.all(color: colorScheme.outlineVariant),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(textEditorSurfaceRadius),
-                child: Padding(
-                  padding: textEditorContentPadding,
-                  child: ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: _controller,
-                    builder: (context, value, child) {
-                      return Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          if (value.text.isEmpty)
-                            IgnorePointer(
-                              child: Align(
-                                alignment: Alignment.topLeft,
-                                child: Text(
-                                  'Enter Chinese text here...',
-                                  style:
-                                      textEditorContentTextStyle(
-                                        context,
-                                        fontSize: widget.fontSize,
-                                      )?.copyWith(
-                                        color: colorScheme.onSurfaceVariant,
-                                      ),
-                                ),
-                              ),
-                            ),
-                          child!,
-                        ],
-                      );
-                    },
-                    child: EditableText(
-                      controller: _controller,
-                      focusNode: widget.focusNode,
-                      scrollController: widget.scrollController,
-                      maxLines: null,
-                      expands: true,
-                      cursorColor: colorScheme.primary,
-                      backgroundCursorColor: colorScheme.onSurface,
-                      style: _textStyle(context),
-                      strutStyle: _strutStyle(context),
-                      textAlign: TextAlign.start,
-                      textDirection: Directionality.of(context),
-                      textHeightBehavior: textEditorContentTextHeightBehavior,
-                      selectionColor: colorScheme.primary.withValues(
-                        alpha: 0.24,
+    return TextEditorSurface(
+      child: Padding(
+        padding: textEditorContentPadding,
+        child: ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _controller,
+          builder: (context, value, child) {
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                if (value.text.isEmpty)
+                  IgnorePointer(
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: Text(
+                        'Enter Chinese text here...',
+                        style: textEditorContentTextStyle(
+                          context,
+                          fontSize: widget.fontSize,
+                        )?.copyWith(color: colorScheme.onSurfaceVariant),
                       ),
-                      onChanged: (text) {
-                        if (!_ignoreChange) {
-                          widget.onChanged(text);
-                        }
-                      },
                     ),
                   ),
-                ),
-              ),
-            ),
+                child!,
+              ],
+            );
+          },
+          child: EditableText(
+            controller: _controller,
+            focusNode: widget.focusNode,
+            scrollController: widget.scrollController,
+            maxLines: null,
+            expands: true,
+            cursorColor: colorScheme.primary,
+            backgroundCursorColor: colorScheme.onSurface,
+            style: _textStyle(context),
+            strutStyle: _strutStyle(context),
+            textAlign: TextAlign.start,
+            textDirection: Directionality.of(context),
+            textHeightBehavior: textEditorContentTextHeightBehavior,
+            selectionColor: colorScheme.primary.withValues(alpha: 0.24),
+            onChanged: (text) {
+              if (!_ignoreChange) {
+                widget.onChanged(text);
+              }
+            },
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

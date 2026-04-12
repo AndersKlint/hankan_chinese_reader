@@ -17,64 +17,61 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final Map<String, Widget> _tabBodies = <String, Widget>{};
+  final TabService _tabService = getIt<TabService>();
+  final ThemeService _themeService = getIt<ThemeService>();
 
   @override
   Widget build(BuildContext context) {
-    final tabService = getIt<TabService>();
-    final themeService = getIt<ThemeService>();
+    return ValueListenableBuilder<List<TabModel>>(
+      valueListenable: _tabService.tabs,
+      builder: (context, tabs, _) {
+        return ValueListenableBuilder<int>(
+          valueListenable: _tabService.activeIndex,
+          builder: (context, activeIndex, _) {
+            // Read the current brightness from the inherited Theme so the
+            // toggle icon updates when ThemeService notifies MaterialApp.
+            final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return ListenableBuilder(
-      listenable: themeService,
-      builder: (context, _) {
-        final themeMode = themeService.value;
-        return ValueListenableBuilder<List<TabModel>>(
-          valueListenable: tabService.tabs,
-          builder: (context, tabs, _) {
-            return ValueListenableBuilder<int>(
-              valueListenable: tabService.activeIndex,
-              builder: (context, activeIndex, _) {
-                return Scaffold(
-                  appBar: AppBar(
-                    toolbarHeight: 46,
-                    titleSpacing: 8,
-                    title: tabs.isEmpty
-                        ? null
-                        : _TabBar(
-                            tabs: tabs,
-                            activeIndex: activeIndex,
-                            onSelect: tabService.setActiveTab,
-                            onClose: tabService.closeTab,
-                          ),
-                    actions: [
-                      IconButton(
-                        icon: Icon(
-                          themeMode == ThemeMode.dark
-                              ? Icons.light_mode_outlined
-                              : Icons.dark_mode_outlined,
-                        ),
-                        visualDensity: VisualDensity.compact,
-                        tooltip: themeMode == ThemeMode.dark
-                            ? 'Switch to light mode'
-                            : 'Switch to dark mode',
-                        onPressed: () => themeService.toggleTheme(),
+            return Scaffold(
+              appBar: AppBar(
+                toolbarHeight: 46,
+                titleSpacing: 8,
+                title: tabs.isEmpty
+                    ? null
+                    : _TabBar(
+                        tabs: tabs,
+                        activeIndex: activeIndex,
+                        onSelect: _tabService.setActiveTab,
+                        onClose: _tabService.closeTab,
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.note_add_outlined),
-                        visualDensity: VisualDensity.compact,
-                        tooltip: 'New text document',
-                        onPressed: () => _createNewDocument(tabService),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.folder_open_outlined),
-                        visualDensity: VisualDensity.compact,
-                        tooltip: 'Open file',
-                        onPressed: () => _openFile(context, tabService),
-                      ),
-                    ],
+                actions: [
+                  IconButton(
+                    icon: Icon(
+                      isDark
+                          ? Icons.light_mode_outlined
+                          : Icons.dark_mode_outlined,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    tooltip: isDark
+                        ? 'Switch to light mode'
+                        : 'Switch to dark mode',
+                    onPressed: _themeService.toggleTheme,
                   ),
-                  body: _buildBody(tabs, activeIndex),
-                );
-              },
+                  IconButton(
+                    icon: const Icon(Icons.note_add_outlined),
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'New text document',
+                    onPressed: _createNewDocument,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.folder_open_outlined),
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Open file',
+                    onPressed: () => _openFile(context),
+                  ),
+                ],
+              ),
+              body: _buildBody(tabs, activeIndex),
             );
           },
         );
@@ -117,15 +114,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _createNewDocument(TabService tabService) {
-    tabService.addTab(
+  void _createNewDocument() {
+    _tabService.addTab(
       title: 'Untitled',
       type: DocumentType.text,
       textContent: '',
     );
   }
 
-  Future<void> _openFile(BuildContext context, TabService tabService) async {
+  Future<void> _openFile(BuildContext context) async {
     final fileService = getIt<FileService>();
     final result = await fileService.pickFile();
     if (result == null || result.files.isEmpty) return;
@@ -136,7 +133,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final extension = name.split('.').last.toLowerCase();
 
     if (extension == 'pdf') {
-      tabService.addTab(title: name, type: DocumentType.pdf, filePath: path);
+      _tabService.addTab(title: name, type: DocumentType.pdf, filePath: path);
     } else {
       // Text file.
       String content;
@@ -148,7 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      tabService.addTab(
+      _tabService.addTab(
         title: name,
         type: DocumentType.text,
         filePath: path,
@@ -192,74 +189,11 @@ class _TabBar extends StatelessWidget {
               padding: const EdgeInsets.only(right: 4),
               child: Align(
                 alignment: Alignment.bottomLeft,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isActive
-                        ? colorScheme.primaryContainer.withValues(alpha: 0.5)
-                        : Colors.transparent,
-                    border: Border(
-                      top: BorderSide(
-                        color: colorScheme.outlineVariant.withValues(
-                          alpha: 0.8,
-                        ),
-                      ),
-                      left: BorderSide(
-                        color: colorScheme.outlineVariant.withValues(
-                          alpha: 0.8,
-                        ),
-                      ),
-                      right: BorderSide(
-                        color: colorScheme.outlineVariant.withValues(
-                          alpha: 0.8,
-                        ),
-                      ),
-                    ),
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(8),
-                      topRight: Radius.circular(8),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        tab.type == DocumentType.pdf
-                            ? Icons.picture_as_pdf_outlined
-                            : Icons.description_outlined,
-                        size: 15,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        '${tab.title}${tab.isModified ? ' •' : ''}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: isActive
-                              ? FontWeight.w600
-                              : FontWeight.normal,
-                          color: isActive
-                              ? colorScheme.primary
-                              : colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(width: 2),
-                      InkWell(
-                        borderRadius: BorderRadius.circular(9),
-                        onTap: () => onClose(index),
-                        child: Padding(
-                          padding: const EdgeInsets.all(3),
-                          child: Icon(
-                            Icons.close,
-                            size: 13,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                child: _TabChip(
+                  tab: tab,
+                  isActive: isActive,
+                  colorScheme: colorScheme,
+                  onClose: () => onClose(index),
                 ),
               ),
             ),
@@ -300,6 +234,81 @@ class _EmptyState extends StatelessWidget {
             'Create a new document or open an existing file to get started.',
             style: textTheme.bodyMedium?.copyWith(
               color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A single tab chip in the tab bar.
+///
+/// Extracted to avoid recomputing the border color three times per tab item.
+class _TabChip extends StatelessWidget {
+  final TabModel tab;
+  final bool isActive;
+  final ColorScheme colorScheme;
+  final VoidCallback onClose;
+
+  const _TabChip({
+    required this.tab,
+    required this.isActive,
+    required this.colorScheme,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = colorScheme.outlineVariant.withValues(alpha: 0.8);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: isActive
+            ? colorScheme.primaryContainer.withValues(alpha: 0.5)
+            : Colors.transparent,
+        border: Border(
+          top: BorderSide(color: borderColor),
+          left: BorderSide(color: borderColor),
+          right: BorderSide(color: borderColor),
+        ),
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(8),
+          topRight: Radius.circular(8),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            tab.type == DocumentType.pdf
+                ? Icons.picture_as_pdf_outlined
+                : Icons.description_outlined,
+            size: 15,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            '${tab.title}${tab.isModified ? ' •' : ''}',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+              color: isActive
+                  ? colorScheme.primary
+                  : colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 2),
+          InkWell(
+            borderRadius: BorderRadius.circular(9),
+            onTap: onClose,
+            child: Padding(
+              padding: const EdgeInsets.all(3),
+              child: Icon(
+                Icons.close,
+                size: 13,
+                color: colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
         ],

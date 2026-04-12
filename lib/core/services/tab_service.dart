@@ -62,21 +62,22 @@ class TabService {
     }
   }
 
+  /// Returns the tab with the given [tabId].
+  ///
+  /// Throws [StateError] if no tab with that ID exists.
+  TabModel findTab(String tabId) => tabs.value.firstWhere((t) => t.id == tabId);
+
   /// Marks a tab as modified or unmodified and notifies listeners.
   void setModified(String tabId, {required bool modified}) {
-    final list = tabs.value;
-    final tab = list.firstWhere((t) => t.id == tabId);
-    tab.isModified = modified;
+    findTab(tabId).isModified = modified;
     // Trigger rebuild.
-    tabs.value = [...list];
+    tabs.value = [...tabs.value];
   }
 
   /// Updates the title of a tab.
   void setTitle(String tabId, String title) {
-    final list = tabs.value;
-    final tab = list.firstWhere((t) => t.id == tabId);
-    tab.title = title;
-    tabs.value = [...list];
+    findTab(tabId).title = title;
+    tabs.value = [...tabs.value];
   }
 
   /// Triggers listeners after updating a tab's mutable fields directly.

@@ -50,7 +50,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
     super.initState();
     _tabService = getIt<TabService>();
     _pdfOcrService = getIt<PdfOcrService>();
-    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
+    final tab = _tabService.findTab(widget.tabId);
     _filePath = tab.filePath;
     _currentPage = tab.pdfCurrentPage;
     _showThumbnails = tab.showPdfThumbnails;
@@ -78,10 +78,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
       final pageNumber = _pdfController.pageNumber;
       if (pageNumber != null && _currentPage != pageNumber) {
         setState(() => _currentPage = pageNumber);
-        final tab = _tabService.tabs.value.firstWhere(
-          (t) => t.id == widget.tabId,
-        );
-        tab.pdfCurrentPage = pageNumber;
+        _tabService.findTab(widget.tabId).pdfCurrentPage = pageNumber;
       }
     }
   }
@@ -89,10 +86,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   void _jumpToPage(int pageNumber) {
     if (pageNumber > 0 && pageNumber <= _pageCount) {
       _pdfController.goToPage(pageNumber: pageNumber);
-      final tab = _tabService.tabs.value.firstWhere(
-        (t) => t.id == widget.tabId,
-      );
-      tab.pdfCurrentPage = pageNumber;
+      _tabService.findTab(widget.tabId).pdfCurrentPage = pageNumber;
     }
   }
 
@@ -105,7 +99,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
       }
     });
 
-    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
+    final tab = _tabService.findTab(widget.tabId);
     tab.showPdfSearch = _showSearchBar;
     tab.pdfSearchQuery = _showSearchBar ? _searchController.text : '';
     _tabService.notifyTabStateChanged();
@@ -145,7 +139,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
       _warmUpOcr();
     }
 
-    final tab = _tabService.tabs.value.firstWhere((t) => t.id == widget.tabId);
+    final tab = _tabService.findTab(widget.tabId);
     tab.pdfOcrEnabled = enabled;
     _tabService.notifyTabStateChanged();
   }
@@ -395,10 +389,8 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                     showThumbnails: _showThumbnails,
                     onToggleThumbnails: () {
                       setState(() => _showThumbnails = !_showThumbnails);
-                      final tab = _tabService.tabs.value.firstWhere(
-                        (t) => t.id == widget.tabId,
-                      );
-                      tab.showPdfThumbnails = _showThumbnails;
+                      _tabService.findTab(widget.tabId).showPdfThumbnails =
+                          _showThumbnails;
                       _tabService.notifyTabStateChanged();
                     },
                     showSearchBar: _showSearchBar,
@@ -418,10 +410,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                     onOcrChanged: _handleOcrToggleRequested,
                     showOcrProgress: _isPerformingOcrLookup,
                     onSearchChanged: (value) {
-                      final tab = _tabService.tabs.value.firstWhere(
-                        (t) => t.id == widget.tabId,
-                      );
-                      tab.pdfSearchQuery = value;
+                      _tabService.findTab(widget.tabId).pdfSearchQuery = value;
                     },
                   ),
                   Expanded(
@@ -451,10 +440,9 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                                       );
                                     });
 
-                                    final tab = _tabService.tabs.value
-                                        .firstWhere(
-                                          (t) => t.id == widget.tabId,
-                                        );
+                                    final tab = _tabService.findTab(
+                                      widget.tabId,
+                                    );
                                     final targetPage = tab.pdfCurrentPage.clamp(
                                       1,
                                       document.pages.length,
@@ -477,11 +465,10 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                                     if (pageNumber != null &&
                                         pageNumber != _currentPage) {
                                       setState(() => _currentPage = pageNumber);
-                                      final tab = _tabService.tabs.value
-                                          .firstWhere(
-                                            (t) => t.id == widget.tabId,
-                                          );
-                                      tab.pdfCurrentPage = pageNumber;
+                                      _tabService
+                                              .findTab(widget.tabId)
+                                              .pdfCurrentPage =
+                                          pageNumber;
                                     }
                                   },
                                   textSelectionParams:
