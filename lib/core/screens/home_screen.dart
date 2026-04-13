@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:hankan_chinese_reader/core/models/tab_model.dart';
 import 'package:hankan_chinese_reader/core/service_locator.dart';
+import 'package:hankan_chinese_reader/core/services/document_history_service.dart';
 import 'package:hankan_chinese_reader/core/services/file_service.dart';
 import 'package:hankan_chinese_reader/core/services/tab_service.dart';
 import 'package:hankan_chinese_reader/core/services/theme_service.dart';
@@ -19,6 +22,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final Map<String, Widget> _tabBodies = <String, Widget>{};
   final TabService _tabService = getIt<TabService>();
   final ThemeService _themeService = getIt<ThemeService>();
+  final DocumentHistoryService _documentHistoryService =
+      getIt<DocumentHistoryService>();
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +36,6 @@ class _HomeScreenState extends State<HomeScreen> {
             // Read the current brightness from the inherited Theme so the
             // toggle icon updates when ThemeService notifies MaterialApp.
             final isDark = Theme.of(context).brightness == Brightness.dark;
-
             return Scaffold(
               appBar: AppBar(
                 toolbarHeight: 46,
@@ -68,6 +72,50 @@ class _HomeScreenState extends State<HomeScreen> {
                     visualDensity: VisualDensity.compact,
                     tooltip: 'Open file',
                     onPressed: () => _openFile(context),
+                  ),
+                  ListenableBuilder(
+                    listenable: _documentHistoryService,
+                    builder: (context, _) {
+                      final recentDocuments =
+                          _documentHistoryService.recentDocuments;
+                      final hasRecents = recentDocuments.isNotEmpty;
+                      return PopupMenuButton<RecentDocumentEntry>(
+                        tooltip: 'Recent documents',
+                        enabled: hasRecents,
+                        onSelected: (entry) =>
+                            _openRecentDocument(context, entry),
+                        itemBuilder: (context) {
+                          return recentDocuments
+                              .map((entry) {
+                                return PopupMenuItem<RecentDocumentEntry>(
+                                  value: entry,
+                                  child: Tooltip(
+                                    message: entry.path,
+                                    waitDuration: const Duration(
+                                      milliseconds: 700,
+                                    ),
+                                    child: SizedBox(
+                                      width: 260,
+                                      child: Text(
+                                        entry.title,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              })
+                              .toList(growable: false);
+                        },
+                        child: Icon(
+                          Icons.history_outlined,
+                          color: hasRecents
+                              ? null
+                              : Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withValues(alpha: 0.38),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -128,30 +176,87 @@ class _HomeScreenState extends State<HomeScreen> {
     if (result == null || result.files.isEmpty) return;
 
     final file = result.files.first;
-    final name = file.name;
     final path = file.path;
-    final extension = name.split('.').last.toLowerCase();
-
-    if (extension == 'pdf') {
-      _tabService.addTab(title: name, type: DocumentType.pdf, filePath: path);
-    } else {
-      // Text file.
-      String content;
-      if (path != null) {
-        content = await fileService.readTextFile(path);
-      } else if (file.bytes != null) {
-        content = fileService.readTextFromBytes(file.bytes!);
-      } else {
-        return;
-      }
-
-      _tabService.addTab(
-        title: name,
-        type: DocumentType.text,
-        filePath: path,
-        textContent: content,
+    if (path != null) {
+      await _openDocumentFromPath(
+        context,
+        path: path,
+        title: file.name,
+        type: _documentTypeForName(file.name),
       );
+      return;
     }
+
+    final extension = _documentTypeForName(file.name);
+    if (extension == DocumentType.pdf || file.bytes == null) {
+      return;
+    }
+
+    _tabService.addTab(
+      title: file.name,
+      type: DocumentType.text,
+      textContent: fileService.readTextFromBytes(file.bytes!),
+    );
+  }
+
+  Future<void> _openRecentDocument(
+    BuildContext context,
+    RecentDocumentEntry entry,
+  ) async {
+    await _openDocumentFromPath(
+      context,
+      path: entry.path,
+      title: entry.title,
+      type: entry.type,
+    );
+  }
+
+  Future<void> _openDocumentFromPath(
+    BuildContext context, {
+    required String path,
+    required String title,
+    required DocumentType type,
+  }) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final fileService = getIt<FileService>();
+
+    try {
+      switch (type) {
+        case DocumentType.pdf:
+          _tabService.addTab(
+            title: title,
+            type: DocumentType.pdf,
+            filePath: path,
+          );
+          break;
+        case DocumentType.text:
+          final content = await fileService.readTextFile(path);
+          _tabService.addTab(
+            title: title,
+            type: DocumentType.text,
+            filePath: path,
+            textContent: content,
+          );
+          break;
+      }
+      unawaited(
+        _documentHistoryService.noteDocumentOpened(
+          path: path,
+          title: title,
+          type: type,
+        ),
+      );
+    } catch (_) {
+      messenger
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('Could not open "$title".')));
+    }
+  }
+
+  DocumentType _documentTypeForName(String name) {
+    return name.toLowerCase().endsWith('.pdf')
+        ? DocumentType.pdf
+        : DocumentType.text;
   }
 }
 

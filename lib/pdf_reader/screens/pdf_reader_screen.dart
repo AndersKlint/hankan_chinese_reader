@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'dart:math' as math;
 import 'package:chinese_popup_dict/chinese_popup_dict.dart';
+import 'package:hankan_chinese_reader/core/services/document_history_service.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:hankan_chinese_reader/core/service_locator.dart';
 import 'package:hankan_chinese_reader/core/services/tab_service.dart';
@@ -27,6 +30,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   final GlobalKey _pdfViewerKey = GlobalKey();
   PdfTextSearcher? _textSearcher;
   late final TabService _tabService;
+  late final DocumentHistoryService _documentHistoryService;
   late final PdfOcrService _pdfOcrService;
 
   String? _filePath;
@@ -39,8 +43,10 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   final Map<int, bool> _pageHasTextLayer = {};
   bool _isPerformingOcrLookup = false;
   bool _hasRequestedOcrWarmUp = false;
+  bool _canPersistPdfViewState = false;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
+  Timer? _saveViewStateDebounce;
 
   static const double _zoomStep = 1.1;
   static const double _scrollZoomSensitivity = 0.002;
@@ -49,6 +55,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   void initState() {
     super.initState();
     _tabService = getIt<TabService>();
+    _documentHistoryService = getIt<DocumentHistoryService>();
     _pdfOcrService = getIt<PdfOcrService>();
     final tab = _tabService.findTab(widget.tabId);
     _filePath = tab.filePath;
@@ -63,6 +70,8 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
 
   @override
   void dispose() {
+    _saveViewStateDebounce?.cancel();
+    _savePdfViewStateNow();
     _pdfController.removeListener(_onPdfStateChanged);
     _textSearcher?.dispose();
     _searchController.dispose();
@@ -80,7 +89,80 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
         setState(() => _currentPage = pageNumber);
         _tabService.findTab(widget.tabId).pdfCurrentPage = pageNumber;
       }
+      _schedulePdfViewStateSave();
     }
+  }
+
+  void _schedulePdfViewStateSave() {
+    if (!_canPersistPdfViewState || _filePath == null) {
+      return;
+    }
+
+    _saveViewStateDebounce?.cancel();
+    _saveViewStateDebounce = Timer(
+      const Duration(milliseconds: 350),
+      _savePdfViewStateNow,
+    );
+  }
+
+  void _savePdfViewStateNow() {
+    if (!_canPersistPdfViewState ||
+        _filePath == null ||
+        !_pdfController.isReady) {
+      return;
+    }
+
+    final pageNumber = _pdfController.pageNumber;
+    if (pageNumber == null) {
+      return;
+    }
+
+    unawaited(
+      _documentHistoryService.savePdfViewState(
+        path: _filePath!,
+        title: _tabService.findTab(widget.tabId).title,
+        pageNumber: pageNumber,
+        zoom: _pdfController.currentZoom,
+        centerPosition: _pdfController.centerPosition,
+      ),
+    );
+  }
+
+  Future<void> _restoreSavedPdfView(PdfDocument document) async {
+    if (_filePath == null) {
+      _canPersistPdfViewState = true;
+      return;
+    }
+
+    final savedState = _documentHistoryService.getPdfViewState(_filePath!);
+    if (savedState == null) {
+      _canPersistPdfViewState = true;
+      return;
+    }
+
+    final clampedZoom = savedState.zoom
+        .clamp(_pdfController.minScale, _pdfController.params.maxScale)
+        .toDouble();
+    final hasUsableCenter =
+        savedState.centerDx.isFinite &&
+        savedState.centerDy.isFinite &&
+        savedState.zoom > 0;
+
+    if (hasUsableCenter) {
+      final matrix = _pdfController.calcMatrixFor(
+        savedState.centerPosition,
+        zoom: clampedZoom,
+      );
+      await _pdfController.goTo(matrix, duration: Duration.zero);
+    } else {
+      final targetPage = savedState.pageNumber.clamp(1, document.pages.length);
+      await _pdfController.goToPage(
+        pageNumber: targetPage,
+        duration: Duration.zero,
+      );
+    }
+
+    _canPersistPdfViewState = true;
   }
 
   void _jumpToPage(int pageNumber) {
@@ -443,23 +525,31 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                                     final tab = _tabService.findTab(
                                       widget.tabId,
                                     );
-                                    final targetPage = tab.pdfCurrentPage.clamp(
-                                      1,
-                                      document.pages.length,
-                                    );
-                                    if (targetPage != 1) {
-                                      _pdfController.goToPage(
-                                        pageNumber: targetPage,
-                                        duration: Duration.zero,
-                                      );
-                                    }
-                                    if (_showSearchBar &&
-                                        tab.pdfSearchQuery.isNotEmpty) {
-                                      _textSearcher?.startTextSearch(
-                                        tab.pdfSearchQuery,
-                                      );
-                                      _activateSearch();
-                                    }
+                                    unawaited(() async {
+                                      final savedState = _filePath == null
+                                          ? null
+                                          : _documentHistoryService
+                                                .getPdfViewState(_filePath!);
+                                      await _restoreSavedPdfView(document);
+
+                                      final targetPage = tab.pdfCurrentPage
+                                          .clamp(1, document.pages.length);
+                                      if (_pdfController.pageNumber == 1 &&
+                                          targetPage != 1 &&
+                                          savedState == null) {
+                                        await _pdfController.goToPage(
+                                          pageNumber: targetPage,
+                                          duration: Duration.zero,
+                                        );
+                                      }
+                                      if (_showSearchBar &&
+                                          tab.pdfSearchQuery.isNotEmpty) {
+                                        _textSearcher?.startTextSearch(
+                                          tab.pdfSearchQuery,
+                                        );
+                                        _activateSearch();
+                                      }
+                                    }());
                                   },
                                   onPageChanged: (pageNumber) {
                                     if (pageNumber != null &&
