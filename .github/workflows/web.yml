@@ -29,6 +29,16 @@ jobs:
                 ref: main
           EOF
 
+      - name: Add dart_paddle_ocr dependency override
+        run: |
+          cat <<EOF > pubspec_overrides.yaml
+          dependency_overrides:
+            dart_paddle_ocr:
+              git:
+                url: https://github.com/AndersKlint/dart_paddle_ocr.git
+                ref: main
+          EOF
+
       - name: Setup GitHub auth for private repos
         env:
           TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
