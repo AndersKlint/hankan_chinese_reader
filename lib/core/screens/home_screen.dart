@@ -179,26 +179,26 @@ class _HomeScreenState extends State<HomeScreen> {
     if (result == null || result.files.isEmpty) return;
 
     final file = result.files.first;
-    final path = file.path;
-    if (path != null) {
+
+    // On web, path is null or a blob URL - use bytes instead
+    if (file.path != null && !file.path!.startsWith('blob:')) {
+      if (!context.mounted) return;
       await _openDocumentFromPath(
         context,
-        path: path,
+        path: file.path!,
         title: file.name,
         type: _documentTypeForName(file.name),
       );
       return;
     }
 
-    final extension = _documentTypeForName(file.name);
-    if (extension == DocumentType.pdf || file.bytes == null) {
-      return;
-    }
+    if (_documentTypeForName(file.name) == DocumentType.pdf) return;
 
+    final bytes = file.bytes ?? await file.xFile.readAsBytes();
     _tabService.addTab(
       title: file.name,
       type: DocumentType.text,
-      textContent: fileService.readTextFromBytes(file.bytes!),
+      textContent: fileService.readTextFromBytes(bytes),
     );
   }
 

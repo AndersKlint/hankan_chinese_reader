@@ -1,10 +1,9 @@
+import 'dart:convert' show utf8;
 import 'dart:io' if (dart.library.html) 'dart:io';
+import 'dart:typed_data' show Uint8List;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:logging/logging.dart';
-
-final _log = Logger('FileService');
 
 /// Handles file picking, reading, and saving across platforms.
 class FileService {
@@ -13,16 +12,11 @@ class FileService {
   Future<FilePickerResult?> pickFile({
     List<String> extensions = const ['txt', 'pdf'],
   }) async {
-    try {
-      return await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: extensions,
-        withData: kIsWeb,
-      );
-    } catch (e) {
-      _log.warning('File picker error: $e');
-      return null;
-    }
+    return FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: extensions,
+      withData: true,
+    );
   }
 
   /// Reads text content from a file at [path].
@@ -33,9 +27,7 @@ class FileService {
   }
 
   /// Reads text from raw bytes (for web platform).
-  String readTextFromBytes(List<int> bytes) {
-    return String.fromCharCodes(bytes);
-  }
+  String readTextFromBytes(List<int> bytes) => utf8.decode(bytes);
 
   /// Saves [content] to a file at [path].
   /// On web, triggers a download instead.
@@ -44,23 +36,16 @@ class FileService {
     String? existingPath,
   }) async {
     if (kIsWeb || existingPath == null) {
-      // Show save dialog.
-      final result = await FilePicker.platform.saveFile(
+      final bytes = Uint8List.fromList(utf8.encode(content));
+      return FilePicker.saveFile(
         dialogTitle: 'Save text file',
         fileName: 'document.txt',
         type: FileType.custom,
         allowedExtensions: ['txt'],
+        bytes: bytes,
       );
-      if (result == null) return null;
-
-      if (!kIsWeb) {
-        final file = File(result);
-        await file.writeAsString(content);
-      }
-      return result;
     }
 
-    // Desktop/mobile: overwrite existing file.
     final file = File(existingPath);
     await file.writeAsString(content);
     return existingPath;
