@@ -19,26 +19,6 @@ jobs:
         with:
           channel: stable
 
-      - name: Add chinese_popup_dict dependency override
-        run: |
-          cat <<EOF > pubspec_overrides.yaml
-          dependency_overrides:
-            chinese_popup_dict:
-              git:
-                url: https://github.com/AndersKlint/flutter_package_chinese_popup_dict.git
-                ref: main
-          EOF
-
-      - name: Add dart_paddle_ocr dependency override
-        run: |
-          cat <<EOF > pubspec_overrides.yaml
-          dependency_overrides:
-            dart_paddle_ocr:
-              git:
-                url: https://github.com/AndersKlint/dart_paddle_ocr.git
-                ref: main
-          EOF
-
       - name: Setup GitHub auth for private repos
         env:
           TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}

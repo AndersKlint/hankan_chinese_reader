@@ -11,9 +11,15 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   chinese_popup_dict:
-    path: ../chinese_popup_dict
+    git:
+      url: https://github.com/AndersKlint/flutter_package_chinese_popup_dict.git
+      ref: f8fb40bec22d2535a31585df12a5f0b42ea576e1
+    # path: ../chinese_popup_dict
   dart_paddle_ocr:
-    path: ../dart_paddle_ocr
+    git:
+      url: https://github.com/AndersKlint/dart_paddle_ocr.git
+      ref: a8c3097220978a006a6821826e5b24d98bc0e867
+    # path: ../dart_paddle_ocr
   get_it: ^9.0.0
   watch_it: ^2.4.2
   pdfrx: ^2.2.0

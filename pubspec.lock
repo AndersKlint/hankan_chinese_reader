@@ -44,9 +44,11 @@ packages:
   chinese_popup_dict:
     dependency: "direct main"
     description:
-      path: "../chinese_popup_dict"
-      relative: true
-    source: path
+      path: "."
+      ref: f8fb40bec22d2535a31585df12a5f0b42ea576e1
+      resolved-ref: f8fb40bec22d2535a31585df12a5f0b42ea576e1
+      url: "https://github.com/AndersKlint/flutter_package_chinese_popup_dict.git"
+    source: git
     version: "0.0.1"
   clipper2:
     dependency: transitive
@@ -107,9 +109,11 @@ packages:
   dart_paddle_ocr:
     dependency: "direct main"
     description:
-      path: "../dart_paddle_ocr"
-      relative: true
-    source: path
+      path: "."
+      ref: a8c3097220978a006a6821826e5b24d98bc0e867
+      resolved-ref: a8c3097220978a006a6821826e5b24d98bc0e867
+      url: "https://github.com/AndersKlint/dart_paddle_ocr.git"
+    source: git
     version: "0.0.1"
   fake_async:
     dependency: transitive
