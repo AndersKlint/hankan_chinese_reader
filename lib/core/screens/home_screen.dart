@@ -61,12 +61,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         : 'Switch to dark mode',
                     onPressed: _themeService.toggleTheme,
                   ),
+                  const VerticalDivider(width: 1, indent: 8, endIndent: 8),
                   IconButton(
                     icon: const Icon(Icons.note_add_outlined),
                     visualDensity: VisualDensity.compact,
                     tooltip: 'New text document',
                     onPressed: _createNewDocument,
                   ),
+                  const VerticalDivider(width: 1, indent: 8, endIndent: 8),
                   IconButton(
                     icon: const Icon(Icons.folder_open_outlined),
                     visualDensity: VisualDensity.compact,
@@ -117,6 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                     },
                   ),
+                  const SizedBox(width: 6),
                 ],
               ),
               body: _buildBody(tabs, activeIndex),
@@ -393,14 +396,18 @@ class _TabChip extends StatelessWidget {
             size: 15,
           ),
           const SizedBox(width: 5),
-          Text(
-            '${tab.title}${tab.isModified ? ' •' : ''}',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-              color: isActive
-                  ? colorScheme.primary
-                  : colorScheme.onSurfaceVariant,
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 140),
+            child: Text(
+              '${tab.title}${tab.isModified ? ' •' : ''}',
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                color: isActive
+                    ? colorScheme.primary
+                    : colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
           const SizedBox(width: 2),
