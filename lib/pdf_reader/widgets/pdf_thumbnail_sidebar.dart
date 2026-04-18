@@ -29,12 +29,31 @@ class PdfThumbnailSidebar extends StatefulWidget {
 
 class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
   static const double _itemExtent = 196;
+  static const int _bufferPages = 3;
   final ScrollController _scrollController = ScrollController();
+  int _firstVisibleIndex = 0;
+  int _lastVisibleIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToCurrentPage());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _updateVisibleRange();
+      }
+      _scrollToCurrentPage();
+    });
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _updateVisibleRange() {
+    if (!_scrollController.hasClients) return;
+    final viewportStart = _scrollController.offset;
+    final viewportEnd =
+        viewportStart + _scrollController.position.viewportDimension;
+    _firstVisibleIndex = (viewportStart / _itemExtent).floor().clamp(0, 9999);
+    _lastVisibleIndex = ((viewportEnd / _itemExtent).ceil() + _bufferPages)
+        .clamp(0, 9999);
   }
 
   @override
@@ -47,8 +66,26 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final viewportStart = _scrollController.offset;
+    final viewportEnd =
+        viewportStart + _scrollController.position.viewportDimension;
+    final newFirstIndex = (viewportStart / _itemExtent).floor().clamp(0, 9999);
+    final newLastIndex = ((viewportEnd / _itemExtent).ceil() + _bufferPages)
+        .clamp(0, 9999);
+    if (newFirstIndex != _firstVisibleIndex ||
+        newLastIndex != _lastVisibleIndex) {
+      setState(() {
+        _firstVisibleIndex = newFirstIndex;
+        _lastVisibleIndex = newLastIndex;
+      });
+    }
   }
 
   void _scrollToCurrentPage() {
@@ -104,6 +141,8 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
             itemBuilder: (context, index) {
               final pageNumber = index + 1;
               final isActive = pageNumber == widget.currentPage;
+              final isVisible =
+                  index >= _firstVisibleIndex && index <= _lastVisibleIndex;
 
               return GestureDetector(
                 onTap: () => widget.onPageTapped(pageNumber),
@@ -124,12 +163,16 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
                   child: Column(
                     children: [
                       Expanded(
-                        child: PdfPageView(
-                          document: document,
-                          pageNumber: pageNumber,
-                          maximumDpi: 72,
-                          decoration: const BoxDecoration(color: Colors.white),
-                        ),
+                        child: isVisible
+                            ? PdfPageView(
+                                document: document,
+                                pageNumber: pageNumber,
+                                maximumDpi: 50,
+                                decoration: const BoxDecoration(
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const SizedBox.expand(),
                       ),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(0, 2, 0, 4),

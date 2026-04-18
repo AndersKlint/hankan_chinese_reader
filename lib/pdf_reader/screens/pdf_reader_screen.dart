@@ -515,6 +515,9 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                                 controller: _pdfController,
                                 params: PdfViewerParams(
                                   scrollByMouseWheel: 0.1,
+                                  maxImageBytesCachedOnMemory: 50 * 1024 * 1024,
+                                  horizontalCacheExtent: 0.5,
+                                  verticalCacheExtent: 0.5,
                                   onViewerReady: (document, controller) {
                                     setState(() {
                                       _textSearcher = PdfTextSearcher(

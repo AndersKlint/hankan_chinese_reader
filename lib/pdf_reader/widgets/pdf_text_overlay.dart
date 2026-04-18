@@ -1,9 +1,15 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:chinese_popup_dict/chinese_popup_dict.dart';
 
 /// Overlays tappable dictionary lookups on top of PDF text fragments.
+///
+/// Uses a single Listener with raw pointer events instead of a GestureDetector
+/// to avoid gesture arena conflicts with pdfrx's text selection.
+/// One handler per page instead of one per fragment — eliminating thousands
+/// of compositing layers and global pointer routes.
 class PdfTextOverlay extends StatefulWidget {
   final PdfPage page;
   final Rect pageRect;
@@ -27,42 +33,16 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
   bool _isLoading = true;
   bool _hasCalculatedText = false;
 
-  Rect _fragmentRect(PdfPageTextFragment fragment) {
-    final charBounds = _tightCharBounds(fragment);
-    return charBounds.toRect(
-      page: widget.page,
-      scaledPageSize: widget.pageRect.size,
-    );
-  }
+  int _loadingPageNumber = -1;
 
-  PdfRect _tightCharBounds(PdfPageTextFragment fragment) {
-    final rects = fragment.charRects;
-    if (rects.isEmpty) {
-      return fragment.bounds;
-    }
+  Offset? _pointerDownPosition;
+  DateTime? _pointerDownTime;
+  bool _isDragging = false;
 
-    var left = rects.first.left;
-    var top = rects.first.top;
-    var right = rects.first.right;
-    var bottom = rects.first.bottom;
+  static const double _dragThreshold = 10;
+  static const int _tapMaxDurationMs = 500;
 
-    for (final rect in rects.skip(1)) {
-      if (rect.left < left) {
-        left = rect.left;
-      }
-      if (rect.top > top) {
-        top = rect.top;
-      }
-      if (rect.right > right) {
-        right = rect.right;
-      }
-      if (rect.bottom < bottom) {
-        bottom = rect.bottom;
-      }
-    }
-
-    return PdfRect(left, top, right, bottom);
-  }
+  final GlobalKey _overlayKey = GlobalKey();
 
   @override
   void initState() {
@@ -77,8 +57,6 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
       _loadText();
     }
   }
-
-  int _loadingPageNumber = -1;
 
   Future<void> _loadText() async {
     final pageNumber = widget.page.pageNumber;
@@ -110,10 +88,121 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
     }
   }
 
+  void _handlePointerDown(PointerDownEvent event) {
+    _pointerDownPosition = event.localPosition;
+    _pointerDownTime = DateTime.now();
+    _isDragging = false;
+  }
+
+  void _handlePointerMove(PointerMoveEvent event) {
+    if (_pointerDownPosition == null) return;
+
+    final distance = (event.localPosition - _pointerDownPosition!).distance;
+    if (distance > _dragThreshold) {
+      _isDragging = true;
+    }
+  }
+
+  void _handlePointerUp(PointerUpEvent event) {
+    if (_pointerDownPosition == null || _pointerDownTime == null) {
+      _resetPointerInteraction();
+      return;
+    }
+
+    final pressDuration = DateTime.now()
+        .difference(_pointerDownTime!)
+        .inMilliseconds;
+    final isTap = !_isDragging && pressDuration < _tapMaxDurationMs;
+
+    if (isTap) {
+      _handleTap(_pointerDownPosition!);
+    }
+
+    _resetPointerInteraction();
+  }
+
+  void _handlePointerCancel(PointerCancelEvent event) {
+    _resetPointerInteraction();
+  }
+
+  void _resetPointerInteraction() {
+    _pointerDownPosition = null;
+    _pointerDownTime = null;
+    _isDragging = false;
+  }
+
+  void _handleTap(Offset localOffset) {
+    if (!widget.enabled) return;
+    if (_pageText == null) return;
+
+    final page = widget.page;
+    final scaledPageSize = widget.pageRect.size;
+    final charRects = _pageText!.charRects;
+
+    double minDistance = double.infinity;
+    int bestCharIndex = -1;
+    Rect? bestRect;
+
+    for (int i = 0; i < charRects.length; i++) {
+      final charRect = charRects[i].toRect(
+        page: page,
+        scaledPageSize: scaledPageSize,
+      );
+
+      if (charRect.contains(localOffset)) {
+        bestCharIndex = i;
+        bestRect = charRect;
+        minDistance = 0;
+        break;
+      }
+
+      final distance = _distanceToRect(localOffset, charRect);
+      if (distance < minDistance) {
+        minDistance = distance;
+        bestCharIndex = i;
+        bestRect = charRect;
+      }
+    }
+
+    if (bestCharIndex < 0 || bestRect == null) return;
+    if (minDistance > _maxCharDistance) return;
+
+    _showPopupForCharIndex(bestCharIndex, bestRect);
+  }
+
+  static const double _maxCharDistance = 12.0;
+
+  double _distanceToRect(Offset point, Rect rect) {
+    if (rect.contains(point)) return 0;
+    final dx = point.dx.clamp(rect.left, rect.right) - point.dx;
+    final dy = point.dy.clamp(rect.top, rect.bottom) - point.dy;
+    return sqrt(dx * dx + dy * dy);
+  }
+
+  void _showPopupForCharIndex(int charIndex, Rect localRect) {
+    final renderBox =
+        _overlayKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    final globalRect = Rect.fromLTWH(
+      renderBox.localToGlobal(localRect.topLeft).dx,
+      renderBox.localToGlobal(localRect.topLeft).dy,
+      localRect.width,
+      localRect.height,
+    );
+
+    ChinesePopupDict.showPopupForText(
+      context: context,
+      text: _pageText!.fullText,
+      charIndex: charIndex,
+      globalTargetRect: globalRect,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const SizedBox.shrink(); // Loading text layer...
+      return const SizedBox.shrink();
     }
 
     if (_hasCalculatedText &&
@@ -122,7 +211,6 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
         return const SizedBox.shrink();
       }
 
-      // Empty text layer or failed to extract.
       return Align(
         alignment: Alignment.bottomRight,
         child: Padding(
@@ -145,69 +233,17 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
       return const SizedBox.shrink();
     }
 
-    return Stack(
-      children: _pageText!.fragments.map((fragment) {
-        final rect = _fragmentRect(fragment);
-
-        return Positioned(
-          left: rect.left,
-          top: rect.top - 1, // Adjust for pdf layout inaccuracies
-          width: rect.width,
-          height: rect.height * 1.15, // Adjust for pdf layout inaccuracies
-          child: _PassThroughPointer(
-            child: FittedBox(
-              fit: BoxFit.fill,
-              alignment: Alignment.topLeft,
-              child: ChinesePopupDict(
-                enableSelection: false,
-                contextText: _pageText!.fullText,
-                contextOffset: fragment.index,
-                text: Text(
-                  fragment.text,
-                  maxLines: 1,
-                  softWrap: false,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    color: Colors.transparent,
-                    height: 1.0,
-                    leadingDistribution: TextLeadingDistribution.even,
-                  ),
-                  strutStyle: const StrutStyle(
-                    fontSize: 20,
-                    forceStrutHeight: true,
-                    height: 1.0,
-                    leading: 0,
-                    leadingDistribution: TextLeadingDistribution.even,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      }).toList(),
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _handlePointerDown,
+      onPointerMove: _handlePointerMove,
+      onPointerUp: _handlePointerUp,
+      onPointerCancel: _handlePointerCancel,
+      child: SizedBox(
+        key: _overlayKey,
+        width: widget.pageRect.width,
+        height: widget.pageRect.height,
+      ),
     );
-  }
-}
-
-/// Used to let scroll and drag events pass through the popupdict text to pdf layer underneath,
-/// allowing scrolling while pointer is on the popup text and selecting text over the in the invisible text layer.
-class _PassThroughPointer extends SingleChildRenderObjectWidget {
-  const _PassThroughPointer({required super.child});
-
-  @override
-  RenderObject createRenderObject(BuildContext context) {
-    return _RenderPassThroughPointer();
-  }
-}
-
-class _RenderPassThroughPointer extends RenderProxyBox {
-  @override
-  bool hitTest(BoxHitTestResult result, {required Offset position}) {
-    if (!size.contains(position) || child == null) {
-      return false;
-    }
-
-    child!.hitTest(result, position: position);
-    return false;
   }
 }

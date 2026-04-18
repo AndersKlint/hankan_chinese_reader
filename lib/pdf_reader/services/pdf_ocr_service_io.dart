@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:dart_paddle_ocr/dart_paddle_ocr.dart';
 import 'package:dart_paddle_ocr/dart_paddle_ocr_plugin.dart';
 import 'package:image/image.dart' as img;
 import 'package:logging/logging.dart';
@@ -107,8 +108,10 @@ class PdfOcrService {
 
       final blocks = await _dartPaddleOcr.detectTextFromImage(
         image: image,
-        trimRecognitionWhitespace: false,
-        enhanceRecognitionCrops: false,
+        processingOptions: const OcrProcessingOptions(
+          trimRecognitionWhitespace: false,
+          enhanceRecognitionCrops: false,
+        ),
       );
       if (blocks.isEmpty) {
         return null;
