@@ -65,7 +65,6 @@ class _TextEditViewState extends State<TextEditView> {
   @override
   void didUpdateWidget(covariant TextEditView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Sync controller if content changed externally (e.g. undo/redo).
     if (widget.initialText != _controller.text) {
       _ignoreChange = true;
       _controller.text = widget.initialText;
@@ -92,54 +91,30 @@ class _TextEditViewState extends State<TextEditView> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final textStyle = _textStyle(context);
 
     return TextEditorSurface(
       child: Padding(
         padding: textEditorContentPadding,
-        child: ValueListenableBuilder<TextEditingValue>(
-          valueListenable: _controller,
-          builder: (context, value, child) {
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                if (value.text.isEmpty)
-                  IgnorePointer(
-                    child: Align(
-                      alignment: Alignment.topLeft,
-                      child: Text(
-                        'Enter Chinese text here...',
-                        style: textEditorContentTextStyle(
-                          context,
-                          fontSize: widget.fontSize,
-                        )?.copyWith(color: colorScheme.onSurfaceVariant),
-                      ),
-                    ),
-                  ),
-                child!,
-              ],
-            );
+        child: TextField(
+          controller: _controller,
+          focusNode: widget.focusNode,
+          scrollController: widget.scrollController,
+          scrollPhysics: widget.scrollPhysics,
+          maxLines: null,
+          expands: true,
+          textAlign: TextAlign.start,
+          style: textStyle,
+          strutStyle: _strutStyle(context),
+          cursorColor: colorScheme.primary,
+          cursorWidth: 2.0,
+          cursorRadius: Radius.zero,
+          decoration: null, // Important: removes default decoration.
+          onChanged: (text) {
+            if (!_ignoreChange) {
+              widget.onChanged(text);
+            }
           },
-          child: EditableText(
-            controller: _controller,
-            focusNode: widget.focusNode,
-            scrollController: widget.scrollController,
-            scrollPhysics: widget.scrollPhysics,
-            maxLines: null,
-            expands: true,
-            cursorColor: colorScheme.primary,
-            backgroundCursorColor: colorScheme.onSurface,
-            style: _textStyle(context),
-            strutStyle: _strutStyle(context),
-            textAlign: TextAlign.start,
-            textDirection: Directionality.of(context),
-            textHeightBehavior: textEditorContentTextHeightBehavior,
-            selectionColor: colorScheme.primary.withValues(alpha: 0.24),
-            onChanged: (text) {
-              if (!_ignoreChange) {
-                widget.onChanged(text);
-              }
-            },
-          ),
         ),
       ),
     );
