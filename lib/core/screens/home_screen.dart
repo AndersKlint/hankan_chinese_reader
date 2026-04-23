@@ -45,9 +45,10 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
   void onWindowClose() {
     final hasUnsaved = _tabService.tabs.value.any((t) => t.isModified);
     if (!hasUnsaved) {
-      // Defer destroy() so the platform-channel close call completes first;
-      // otherwise the window lingers for a few seconds waiting on the channel.
-      Future.microtask(windowManager.destroy);
+      // Release prevent-close and close immediately instead of destroy()
+      // which causes multi-second delay in release builds.
+      windowManager.setPreventClose(false);
+      windowManager.close();
       return;
     }
 
@@ -65,7 +66,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
     );
 
     if (shouldExit) {
-      await windowManager.destroy();
+      windowManager.setPreventClose(false);
+      windowManager.close();
     }
   }
 

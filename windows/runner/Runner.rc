@@ -90,10 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-VALUE "FileDescription", "HanKan - Chinese Reader" "\0"
+            VALUE "FileDescription", "hankan_chinese_reader" "\0"
+            VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "hankan_chinese_reader" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
             VALUE "OriginalFilename", "hankan_chinese_reader.exe" "\0"
-            VALUE "ProductName", "HanKan - Chinese Reader" "\0"
+            VALUE "ProductName", "hankan_chinese_reader" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
