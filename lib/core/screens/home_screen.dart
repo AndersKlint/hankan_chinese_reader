@@ -12,7 +12,8 @@ import 'package:hankan_chinese_reader/core/widgets/unsaved_changes_dialogs.dart'
 import 'package:hankan_chinese_reader/text_editor/screens/text_editor_screen.dart';
 import 'package:hankan_chinese_reader/text_editor/services/text_editor_service_registry.dart';
 import 'package:hankan_chinese_reader/pdf_reader/screens/pdf_reader_screen.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:window_manager/window_manager.dart'
+    if (dart.library.html) 'package:hankan_chinese_reader/core/stubs/window_manager_stub.dart';
 
 /// The main shell screen with tab bar and content area.
 class HomeScreen extends StatefulWidget {

@@ -4,7 +4,8 @@ import 'package:hankan_chinese_reader/core/screens/home_screen.dart';
 import 'package:hankan_chinese_reader/core/services/theme_service.dart';
 import 'package:hankan_chinese_reader/core/theme/app_theme.dart';
 import 'package:logging/logging.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:window_manager/window_manager.dart'
+    if (dart.library.html) 'package:hankan_chinese_reader/core/stubs/window_manager_stub.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
