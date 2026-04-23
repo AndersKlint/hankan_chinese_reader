@@ -28,6 +28,7 @@ dependencies:
   logging: ^1.3.0
   image: ^4.8.0
   shared_preferences: ^2.5.5
+  window_manager: ^0.5.1
 
 dev_dependencies:
   flutter_test:

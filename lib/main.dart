@@ -4,6 +4,7 @@ import 'package:hankan_chinese_reader/core/screens/home_screen.dart';
 import 'package:hankan_chinese_reader/core/services/theme_service.dart';
 import 'package:hankan_chinese_reader/core/theme/app_theme.dart';
 import 'package:logging/logging.dart';
+import 'package:window_manager/window_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,6 +15,8 @@ void main() async {
   });
 
   await setupServiceLocator();
+  await windowManager.ensureInitialized();
+  await windowManager.setPreventClose(true);
 
   runApp(const HankanApp());
 }

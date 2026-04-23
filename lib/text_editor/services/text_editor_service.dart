@@ -1,6 +1,8 @@
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
+import 'package:hankan_chinese_reader/core/services/file_service.dart';
+import 'package:hankan_chinese_reader/core/services/tab_service.dart';
 
 /// Manages text content and undo/redo state for a text editor tab.
 class TextEditorService {
@@ -13,22 +15,38 @@ class TextEditorService {
   /// Whether the editor is in read mode (popup dict active).
   final ValueNotifier<bool> isReadMode = ValueNotifier<bool>(false);
 
+  final FileService? _fileService;
+  final TabService? _tabService;
+
   final Queue<String> _undoStack = Queue<String>();
   final Queue<String> _redoStack = Queue<String>();
 
   String _savedContent = '';
+  String? _tabId;
   DateTime? _typingBurstStartedAt;
   DateTime? _lastTypingEditAt;
 
   static const int _maxUndoHistory = 500;
   static const Duration _typingUndoMergeWindow = Duration(milliseconds: 800);
 
+  /// Creates a new service. [fileService] and [tabService] are optional so
+  /// unit tests can construct the service without a full DI container.
+  TextEditorService({FileService? fileService, TabService? tabService})
+    : _fileService = fileService,
+      _tabService = tabService;
+
   /// Initializes the service with the given [text].
-  void initialize(String text, {required bool isReadMode}) {
+  void initialize(
+    String text, {
+    required bool isReadMode,
+    String? tabId,
+    String? filePath,
+  }) {
     _savedContent = text;
     content.value = text;
     isModified.value = false;
     this.isReadMode.value = isReadMode;
+    _tabId = tabId;
     _undoStack.clear();
     _redoStack.clear();
     _resetTypingUndoCoalescing();
@@ -152,6 +170,35 @@ class TextEditorService {
   /// Toggles between edit and read mode.
   void toggleReadMode() {
     isReadMode.value = !isReadMode.value;
+  }
+
+  /// Saves the current content to disk. Returns `true` if the file was saved
+  /// (or already saved), `false` if the user cancelled the save dialog.
+  Future<bool> save() async {
+    final fileService = _fileService;
+    final tabService = _tabService;
+    final tabId = _tabId;
+    if (fileService == null || tabService == null || tabId == null) {
+      return false;
+    }
+
+    final tab = tabService.findTab(tabId);
+
+    final savedPath = await fileService.saveTextFile(
+      content: content.value,
+      existingPath: tab.filePath,
+    );
+
+    if (savedPath != null) {
+      tab.filePath = savedPath;
+      tab.textContent = content.value;
+      final fileName = savedPath.split('/').last.split('\\').last;
+      tabService.setTitle(tabId, fileName);
+      markSaved();
+      return true;
+    }
+
+    return false;
   }
 
   /// Releases resources held by this service.

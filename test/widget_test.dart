@@ -7,12 +7,14 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:hankan_chinese_reader/main.dart';
 import 'package:hankan_chinese_reader/core/service_locator.dart';
 
 void main() {
   setUpAll(() async {
+    SharedPreferences.setMockInitialValues({});
     await setupServiceLocator();
   });
 

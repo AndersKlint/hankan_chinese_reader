@@ -1,14 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:hankan_chinese_reader/core/models/tab_model.dart';
 import 'package:hankan_chinese_reader/core/service_locator.dart';
 import 'package:hankan_chinese_reader/core/services/document_history_service.dart';
 import 'package:hankan_chinese_reader/core/services/file_service.dart';
 import 'package:hankan_chinese_reader/core/services/tab_service.dart';
 import 'package:hankan_chinese_reader/core/services/theme_service.dart';
+import 'package:hankan_chinese_reader/core/widgets/unsaved_changes_dialogs.dart';
 import 'package:hankan_chinese_reader/text_editor/screens/text_editor_screen.dart';
+import 'package:hankan_chinese_reader/text_editor/services/text_editor_service_registry.dart';
 import 'package:hankan_chinese_reader/pdf_reader/screens/pdf_reader_screen.dart';
+import 'package:window_manager/window_manager.dart';
 
 /// The main shell screen with tab bar and content area.
 class HomeScreen extends StatefulWidget {
@@ -18,12 +22,52 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WindowListener {
   final Map<String, Widget> _tabBodies = <String, Widget>{};
   final TabService _tabService = getIt<TabService>();
   final ThemeService _themeService = getIt<ThemeService>();
   final DocumentHistoryService _documentHistoryService =
       getIt<DocumentHistoryService>();
+
+  @override
+  void initState() {
+    super.initState();
+    windowManager.addListener(this);
+  }
+
+  @override
+  void dispose() {
+    windowManager.removeListener(this);
+    super.dispose();
+  }
+
+  @override
+  void onWindowClose() {
+    final hasUnsaved = _tabService.tabs.value.any((t) => t.isModified);
+    if (!hasUnsaved) {
+      // Defer destroy() so the platform-channel close call completes first;
+      // otherwise the window lingers for a few seconds waiting on the channel.
+      Future.microtask(windowManager.destroy);
+      return;
+    }
+
+    _confirmCloseWithUnsavedChanges();
+  }
+
+  Future<void> _confirmCloseWithUnsavedChanges() async {
+    final unsavedCount =
+        _tabService.tabs.value.where((t) => t.isModified).length;
+
+    final shouldExit = await showUnsavedAppCloseDialog(
+      // ignore: use_build_context_synchronously
+      context,
+      unsavedCount: unsavedCount,
+    );
+
+    if (shouldExit) {
+      await windowManager.destroy();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,93 +80,99 @@ class _HomeScreenState extends State<HomeScreen> {
             // Read the current brightness from the inherited Theme so the
             // toggle icon updates when ThemeService notifies MaterialApp.
             final isDark = Theme.of(context).brightness == Brightness.dark;
-            return Scaffold(
-              appBar: AppBar(
-                toolbarHeight: 46,
-                titleSpacing: 8,
-                title: tabs.isEmpty
-                    ? null
-                    : _TabBar(
-                        tabs: tabs,
-                        activeIndex: activeIndex,
-                        onSelect: _tabService.setActiveTab,
-                        onClose: _tabService.closeTab,
+            return PopScope(
+              canPop: false,
+              onPopInvokedWithResult: (didPop, result) {
+                if (didPop) return;
+                _confirmAppExitMobile(context);
+              },
+              child: Scaffold(
+                appBar: AppBar(
+                  toolbarHeight: 46,
+                  titleSpacing: 8,
+                  title: tabs.isEmpty
+                      ? null
+                      : _TabBar(
+                          tabs: tabs,
+                          activeIndex: activeIndex,
+                          onSelect: _tabService.setActiveTab,
+                          onClose: (index) => _handleCloseTab(context, index),
+                        ),
+                  actions: [
+                    IconButton(
+                      icon: Icon(
+                        isDark
+                            ? Icons.light_mode_outlined
+                            : Icons.dark_mode_outlined,
                       ),
-                actions: [
-                  IconButton(
-                    icon: Icon(
-                      isDark
-                          ? Icons.light_mode_outlined
-                          : Icons.dark_mode_outlined,
+                      visualDensity: VisualDensity.compact,
+                      tooltip: isDark
+                          ? 'Switch to light mode'
+                          : 'Switch to dark mode',
+                      onPressed: _themeService.toggleTheme,
                     ),
-                    visualDensity: VisualDensity.compact,
-                    tooltip: isDark
-                        ? 'Switch to light mode'
-                        : 'Switch to dark mode',
-                    onPressed: _themeService.toggleTheme,
-                  ),
-                  const VerticalDivider(width: 1, indent: 8, endIndent: 8),
-                  IconButton(
-                    icon: const Icon(Icons.note_add_outlined),
-                    visualDensity: VisualDensity.compact,
-                    tooltip: 'New text document',
-                    onPressed: _createNewDocument,
-                  ),
-                  const VerticalDivider(width: 1, indent: 8, endIndent: 8),
-                  IconButton(
-                    icon: const Icon(Icons.folder_open_outlined),
-                    visualDensity: VisualDensity.compact,
-                    tooltip: 'Open file',
-                    onPressed: () => _openFile(context),
-                  ),
-                  ListenableBuilder(
-                    listenable: _documentHistoryService,
-                    builder: (context, _) {
-                      final recentDocuments =
-                          _documentHistoryService.recentDocuments;
-                      final hasRecents = recentDocuments.isNotEmpty;
-                      return PopupMenuButton<RecentDocumentEntry>(
-                        tooltip: 'Recent documents',
-                        enabled: hasRecents,
-                        onSelected: (entry) =>
-                            _openRecentDocument(context, entry),
-                        itemBuilder: (context) {
-                          return recentDocuments
-                              .map((entry) {
-                                return PopupMenuItem<RecentDocumentEntry>(
-                                  value: entry,
-                                  child: Tooltip(
-                                    message: entry.path,
-                                    waitDuration: const Duration(
-                                      milliseconds: 700,
-                                    ),
-                                    child: SizedBox(
-                                      width: 260,
-                                      child: Text(
-                                        entry.title,
-                                        overflow: TextOverflow.ellipsis,
+                    const VerticalDivider(width: 1, indent: 8, endIndent: 8),
+                    IconButton(
+                      icon: const Icon(Icons.note_add_outlined),
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'New text document',
+                      onPressed: _createNewDocument,
+                    ),
+                    const VerticalDivider(width: 1, indent: 8, endIndent: 8),
+                    IconButton(
+                      icon: const Icon(Icons.folder_open_outlined),
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Open file',
+                      onPressed: () => _openFile(context),
+                    ),
+                    ListenableBuilder(
+                      listenable: _documentHistoryService,
+                      builder: (context, _) {
+                        final recentDocuments =
+                            _documentHistoryService.recentDocuments;
+                        final hasRecents = recentDocuments.isNotEmpty;
+                        return PopupMenuButton<RecentDocumentEntry>(
+                          tooltip: 'Recent documents',
+                          enabled: hasRecents,
+                          onSelected: (entry) =>
+                              _openRecentDocument(context, entry),
+                          itemBuilder: (context) {
+                            return recentDocuments
+                                .map((entry) {
+                                  return PopupMenuItem<RecentDocumentEntry>(
+                                    value: entry,
+                                    child: Tooltip(
+                                      message: entry.path,
+                                      waitDuration: const Duration(
+                                        milliseconds: 700,
+                                      ),
+                                      child: SizedBox(
+                                        width: 260,
+                                        child: Text(
+                                          entry.title,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                );
-                              })
-                              .toList(growable: false);
-                        },
-                        child: Icon(
-                          Icons.history_outlined,
-                          color: hasRecents
-                              ? null
-                              : Theme.of(
-                                  context,
-                                ).colorScheme.onSurface.withValues(alpha: 0.38),
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(width: 6),
-                ],
+                                  );
+                                })
+                                .toList(growable: false);
+                          },
+                          child: Icon(
+                            Icons.history_outlined,
+                            color: hasRecents
+                                ? null
+                                : Theme.of(context).colorScheme.onSurface
+                                      .withValues(alpha: 0.38),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                ),
+                body: _buildBody(tabs, activeIndex),
               ),
-              body: _buildBody(tabs, activeIndex),
             );
           },
         );
@@ -163,6 +213,53 @@ class _HomeScreenState extends State<HomeScreen> {
           )
           .toList(growable: false),
     );
+  }
+
+  Future<void> _handleCloseTab(BuildContext context, int index) async {
+    final tab = _tabService.tabs.value[index];
+    if (!tab.isModified) {
+      _tabService.closeTab(index);
+      return;
+    }
+
+    final action = await showUnsavedTabCloseDialog(
+      context,
+      tabTitle: tab.title,
+    );
+
+    switch (action) {
+      case UnsavedTabAction.cancel:
+        return;
+      case UnsavedTabAction.discard:
+        _tabService.closeTab(index);
+        return;
+      case UnsavedTabAction.save:
+        if (tab.type == DocumentType.text) {
+          final service = getIt<TextEditorServiceRegistry>().getService(tab.id);
+          final saved = await service?.save() ?? false;
+          if (saved) _tabService.closeTab(index);
+        } else {
+          _tabService.closeTab(index);
+        }
+        return;
+    }
+  }
+
+  Future<void> _confirmAppExitMobile(BuildContext context) async {
+    final unsaved = _tabService.tabs.value.where((t) => t.isModified).length;
+    if (unsaved == 0) {
+      await SystemNavigator.pop();
+      return;
+    }
+
+    final shouldExit = await showUnsavedAppCloseDialog(
+      context,
+      unsavedCount: unsaved,
+    );
+
+    if (shouldExit) {
+      await SystemNavigator.pop();
+    }
   }
 
   void _createNewDocument() {

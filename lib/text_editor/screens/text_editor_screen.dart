@@ -6,10 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:watch_it/watch_it.dart';
 import 'package:hankan_chinese_reader/core/models/tab_model.dart';
 import 'package:hankan_chinese_reader/core/service_locator.dart';
-import 'package:hankan_chinese_reader/core/services/file_service.dart';
 import 'package:hankan_chinese_reader/core/services/tab_service.dart';
 import 'package:hankan_chinese_reader/text_editor/models/text_search_result.dart';
 import 'package:hankan_chinese_reader/text_editor/services/text_editor_service.dart';
+import 'package:hankan_chinese_reader/text_editor/services/text_editor_service_registry.dart';
 import 'package:hankan_chinese_reader/text_editor/widgets/text_content_style.dart';
 import 'package:hankan_chinese_reader/text_editor/widgets/text_edit_view.dart';
 import 'package:hankan_chinese_reader/text_editor/widgets/text_read_view.dart';
@@ -29,7 +29,6 @@ class TextEditorScreen extends WatchingStatefulWidget {
 class _TextEditorScreenState extends State<TextEditorScreen> {
   late final TextEditorService _editorService;
   late final TabService _tabService;
-  late final FileService _fileService;
   late final ScrollController _readScrollController;
   late final ScrollController _editScrollController;
   late final FocusNode _editFocusNode;
@@ -53,9 +52,8 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
   @override
   void initState() {
     super.initState();
-    _editorService = TextEditorService();
+    _editorService = getIt<TextEditorService>();
     _tabService = getIt<TabService>();
-    _fileService = getIt<FileService>();
 
     final tab = _tab;
     _readScrollController = ScrollController(
@@ -73,7 +71,10 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
     _editorService.initialize(
       tab.textContent ?? '',
       isReadMode: tab.isReadMode,
+      tabId: widget.tabId,
+      filePath: tab.filePath,
     );
+    getIt<TextEditorServiceRegistry>().register(widget.tabId, _editorService);
     _showSearch = tab.showTextSearch;
     _searchQuery = tab.textSearchQuery;
     _fontSize = tab.textFontSize;
@@ -87,6 +88,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
 
   @override
   void dispose() {
+    getIt<TextEditorServiceRegistry>().unregister(widget.tabId);
     _editorService.isModified.removeListener(_onModifiedChanged);
     _readScrollController.removeListener(_persistReadScrollOffset);
     _editScrollController.removeListener(_persistEditScrollOffset);
@@ -389,20 +391,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
   }
 
   Future<void> _save() async {
-    final tab = _tab;
-
-    final savedPath = await _fileService.saveTextFile(
-      content: _editorService.content.value,
-      existingPath: tab.filePath,
-    );
-
-    if (savedPath != null) {
-      tab.filePath = savedPath;
-      tab.textContent = _editorService.content.value;
-      final fileName = savedPath.split('/').last.split('\\').last;
-      _tabService.setTitle(widget.tabId, fileName);
-      _editorService.markSaved();
-    }
+    await _editorService.save();
   }
 
   @override
