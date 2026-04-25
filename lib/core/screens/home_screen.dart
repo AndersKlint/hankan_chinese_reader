@@ -29,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
   final ThemeService _themeService = getIt<ThemeService>();
   final DocumentHistoryService _documentHistoryService =
       getIt<DocumentHistoryService>();
+  bool _isClosing = false;
 
   @override
   void initState() {
@@ -44,12 +45,18 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
 
   @override
   void onWindowClose() {
+    if (_isClosing) return;
+
     final hasUnsaved = _tabService.tabs.value.any((t) => t.isModified);
     if (!hasUnsaved) {
-      // Release prevent-close and close immediately instead of destroy()
-      // which causes multi-second delay in release builds.
-      windowManager.setPreventClose(false);
-      windowManager.close();
+      _isClosing = true;
+      // Defer close() to a fresh microtask. On Linux gtk_window_close()
+      // synchronously emits another delete-event; deferring avoids re-entrant
+      // close processing and the use-after-free segfault that follows.
+      unawaited(() async {
+        await windowManager.setPreventClose(false);
+        await windowManager.close();
+      }());
       return;
     }
 
@@ -57,6 +64,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
   }
 
   Future<void> _confirmCloseWithUnsavedChanges() async {
+    if (_isClosing) return;
+
     final unsavedCount =
         _tabService.tabs.value.where((t) => t.isModified).length;
 
@@ -67,8 +76,9 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
     );
 
     if (shouldExit) {
-      windowManager.setPreventClose(false);
-      windowManager.close();
+      _isClosing = true;
+      await windowManager.setPreventClose(false);
+      await windowManager.close();
     }
   }
 
