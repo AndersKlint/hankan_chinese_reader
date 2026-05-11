@@ -42,6 +42,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   bool? _ocrEnabled;
   final Map<int, bool> _pageHasTextLayer = {};
   bool _isPerformingOcrLookup = false;
+  bool _showProgressIndicator = false;
   bool _hasRequestedOcrWarmUp = false;
   bool _canPersistPdfViewState = false;
   final TextEditingController _searchController = TextEditingController();
@@ -261,6 +262,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
 
     setState(() {
       _isPerformingOcrLookup = true;
+      _showProgressIndicator = true;
     });
     try {
       ChinesePopupDict.hideActivePopup();
@@ -656,21 +658,29 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                   ),
                 ],
               ),
-              Positioned(
-                top: 40,
-                left: 0,
-                right: 0,
-                child: IgnorePointer(
-                  child: AnimatedOpacity(
-                    opacity: _isPerformingOcrLookup ? 1 : 0,
-                    duration: const Duration(milliseconds: 120),
-                    child: const SizedBox(
-                      height: 3,
-                      child: LinearProgressIndicator(),
+              if (_showProgressIndicator)
+                Positioned(
+                  top: 40,
+                  left: 0,
+                  right: 0,
+                  child: IgnorePointer(
+                    child: AnimatedOpacity(
+                      opacity: _isPerformingOcrLookup ? 1 : 0,
+                      duration: const Duration(milliseconds: 120),
+                      onEnd: () {
+                        if (!_isPerformingOcrLookup && mounted) {
+                          setState(
+                            () => _showProgressIndicator = false,
+                          );
+                        }
+                      },
+                      child: const SizedBox(
+                        height: 3,
+                        child: LinearProgressIndicator(),
+                      ),
                     ),
                   ),
                 ),
-              ),
             ],
           ),
         ),
