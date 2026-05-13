@@ -34,6 +34,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   late final PdfOcrService _pdfOcrService;
 
   String? _filePath;
+  String _title = '';
   int _currentPage = 1;
   int _pageCount = 0;
 
@@ -45,9 +46,14 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   bool _showProgressIndicator = false;
   bool _hasRequestedOcrWarmUp = false;
   bool _canPersistPdfViewState = false;
+  bool _disposed = false;
+  Offset? _restoreLockCenter;
+  double _restoreLockZoom = 1.0;
+  Timer? _restoreLockTimer;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   Timer? _saveViewStateDebounce;
+  Future<void>? _pendingPdfViewStateSave;
 
   static const double _zoomStep = 1.1;
   static const double _scrollZoomSensitivity = 0.002;
@@ -60,6 +66,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
     _pdfOcrService = getIt<PdfOcrService>();
     final tab = _tabService.findTab(widget.tabId);
     _filePath = tab.filePath;
+    _title = tab.title;
     _currentPage = tab.pdfCurrentPage;
     _showThumbnails = tab.showPdfThumbnails;
     _showSearchBar = tab.showPdfSearch;
@@ -72,7 +79,10 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   @override
   void dispose() {
     _saveViewStateDebounce?.cancel();
+    _restoreLockTimer?.cancel();
+    _restoreLockCenter = null;
     _savePdfViewStateNow();
+    _disposed = true;
     _pdfController.removeListener(_onPdfStateChanged);
     _textSearcher?.dispose();
     _searchController.dispose();
@@ -81,6 +91,23 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   }
 
   void _onPdfStateChanged() {
+    if (_restoreLockCenter != null && _canPersistPdfViewState) {
+      final center = _pdfController.centerPosition;
+      if ((center - _restoreLockCenter!).distance > _restoreLockZoom * 300) {
+        // Layout change during progressive loading shifted the position.
+        // Re-apply saved position and release lock.
+        final saved = _restoreLockCenter;
+        _restoreLockTimer?.cancel();
+        _restoreLockCenter = null;
+        final matrix = _pdfController.calcMatrixFor(
+          saved!,
+          zoom: _restoreLockZoom,
+        );
+        _pdfController.value = matrix;
+        return;
+      }
+    }
+
     if (_pdfController.isReady) {
       if (_pageCount != _pdfController.pageCount) {
         setState(() => _pageCount = _pdfController.pageCount);
@@ -107,7 +134,8 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   }
 
   void _savePdfViewStateNow() {
-    if (!_canPersistPdfViewState ||
+    if (_disposed ||
+        !_canPersistPdfViewState ||
         _filePath == null ||
         !_pdfController.isReady) {
       return;
@@ -118,15 +146,24 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
       return;
     }
 
-    unawaited(
-      _documentHistoryService.savePdfViewState(
-        path: _filePath!,
-        title: _tabService.findTab(widget.tabId).title,
-        pageNumber: pageNumber,
-        zoom: _pdfController.currentZoom,
-        centerPosition: _pdfController.centerPosition,
-      ),
-    );
+    final path = _filePath!;
+    final title = _title;
+    final zoom = _pdfController.currentZoom;
+    final center = _pdfController.centerPosition;
+
+    _pendingPdfViewStateSave = (_pendingPdfViewStateSave ?? Future.value())
+        .then((_) {
+          return _documentHistoryService.savePdfViewState(
+            path: path,
+            title: title,
+            pageNumber: pageNumber,
+            zoom: zoom,
+            centerPosition: center,
+          );
+        })
+        .catchError((_) {
+          // Swallow — chain must stay unbroken for subsequent saves.
+        });
   }
 
   Future<void> _restoreSavedPdfView(PdfDocument document) async {
@@ -141,22 +178,40 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
       return;
     }
 
-    final clampedZoom = savedState.zoom
-        .clamp(_pdfController.minScale, _pdfController.params.maxScale)
-        .toDouble();
+    final targetPage = savedState.pageNumber.clamp(1, document.pages.length);
     final hasUsableCenter =
         savedState.centerDx.isFinite &&
         savedState.centerDy.isFinite &&
         savedState.zoom > 0;
 
     if (hasUsableCenter) {
+      final clampedZoom = savedState.zoom.clamp(
+        _pdfController.minScale,
+        _pdfController.params.maxScale,
+      );
+
+      // Navigate to the saved page first — this anchors the page number
+      // and goes through pdfrx's own boundary-safe navigation.
+      await _pdfController.goToPage(
+        pageNumber: targetPage,
+        duration: Duration.zero,
+      );
+
+      // Then overlay the saved zoom and exact center position.
       final matrix = _pdfController.calcMatrixFor(
         savedState.centerPosition,
         zoom: clampedZoom,
       );
-      await _pdfController.goTo(matrix, duration: Duration.zero);
+      _pdfController.value = matrix;
+
+      // Lock the restored position so layout-change drift is corrected.
+      _restoreLockCenter = savedState.centerPosition;
+      _restoreLockZoom = clampedZoom;
+      _restoreLockTimer?.cancel();
+      _restoreLockTimer = Timer(const Duration(seconds: 3), () {
+        _restoreLockCenter = null;
+      });
     } else {
-      final targetPage = savedState.pageNumber.clamp(1, document.pages.length);
       await _pdfController.goToPage(
         pageNumber: targetPage,
         duration: Duration.zero,
@@ -668,10 +723,8 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                       opacity: _isPerformingOcrLookup ? 1 : 0,
                       duration: const Duration(milliseconds: 120),
                       onEnd: () {
-                        if (!_isPerformingOcrLookup && mounted) {
-                          setState(
-                            () => _showProgressIndicator = false,
-                          );
+                        if (!_isPerformingOcrLookup && !_disposed) {
+                          setState(() => _showProgressIndicator = false);
                         }
                       },
                       child: const SizedBox(
