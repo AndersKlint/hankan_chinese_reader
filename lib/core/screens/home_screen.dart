@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hankan_chinese_reader/core/models/tab_model.dart';
@@ -100,95 +101,204 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
                 _confirmAppExitMobile(context);
               },
               child: Scaffold(
-                appBar: AppBar(
-                  toolbarHeight: 46,
-                  titleSpacing: 8,
-                  title: tabs.isEmpty
-                      ? null
-                      : _TabBar(
-                          tabs: tabs,
-                          activeIndex: activeIndex,
-                          onSelect: _tabService.setActiveTab,
-                          onClose: (index) => _handleCloseTab(context, index),
-                        ),
-                  actions: [
-                    IconButton(
-                      icon: Icon(
-                        isDark
-                            ? Icons.light_mode_outlined
-                            : Icons.dark_mode_outlined,
-                      ),
-                      visualDensity: VisualDensity.compact,
-                      tooltip: isDark
-                          ? 'Switch to light mode'
-                          : 'Switch to dark mode',
-                      onPressed: _themeService.toggleTheme,
-                    ),
-                    const VerticalDivider(width: 1, indent: 8, endIndent: 8),
-                    IconButton(
-                      icon: const Icon(Icons.note_add_outlined),
-                      visualDensity: VisualDensity.compact,
-                      tooltip: 'New text document',
-                      onPressed: _createNewDocument,
-                    ),
-                    const VerticalDivider(width: 1, indent: 8, endIndent: 8),
-                    IconButton(
-                      icon: const Icon(Icons.folder_open_outlined),
-                      visualDensity: VisualDensity.compact,
-                      tooltip: 'Open file',
-                      onPressed: () => _openFile(context),
-                    ),
-                    ListenableBuilder(
-                      listenable: _documentHistoryService,
-                      builder: (context, _) {
-                        final recentDocuments =
-                            _documentHistoryService.recentDocuments;
-                        final hasRecents = recentDocuments.isNotEmpty;
-                        return PopupMenuButton<RecentDocumentEntry>(
-                          tooltip: 'Recent documents',
-                          enabled: hasRecents,
-                          onSelected: (entry) =>
-                              _openRecentDocument(context, entry),
-                          itemBuilder: (context) {
-                            return recentDocuments
-                                .map((entry) {
-                                  return PopupMenuItem<RecentDocumentEntry>(
-                                    value: entry,
-                                    child: Tooltip(
-                                      message: entry.path,
-                                      waitDuration: const Duration(
-                                        milliseconds: 700,
-                                      ),
-                                      child: SizedBox(
-                                        width: 260,
-                                        child: Text(
-                                          entry.title,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                })
-                                .toList(growable: false);
-                          },
-                          child: Icon(
-                            Icons.history_outlined,
-                            color: hasRecents
-                                ? null
-                                : Theme.of(context).colorScheme.onSurface
-                                      .withValues(alpha: 0.38),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(width: 6),
-                  ],
+                appBar: PreferredSize(
+                  preferredSize: const Size.fromHeight(46),
+                  child: LayoutBuilder(builder: (context, constraints) {
+                    final tabCount = _tabService.tabs.value.length;
+                    const actionsWidth = 200;
+                    const tabChipWidth = 160;
+                    final tabsNeed = tabCount.clamp(0, 3) * tabChipWidth;
+                    final fits =
+                        constraints.maxWidth >= actionsWidth + tabsNeed + 32;
+
+                    return AppBar(
+                      toolbarHeight: 46,
+                      titleSpacing: 8,
+                      title: tabs.isEmpty
+                          ? null
+                          : _TabBar(
+                              tabs: tabs,
+                              activeIndex: activeIndex,
+                              onSelect: _tabService.setActiveTab,
+                              onClose: (index) =>
+                                  _handleCloseTab(context, index),
+                            ),
+                      actions: fits
+                          ? _buildDesktopActions(context, isDark)
+                          : <Widget>[
+                              _buildMobileActionButton(context, isDark),
+                            ],
+                    );
+                  }),
                 ),
                 body: _buildBody(tabs, activeIndex),
               ),
             );
           },
         );
+      },
+    );
+  }
+
+  List<Widget> _buildDesktopActions(BuildContext context, bool isDark) {
+    return [
+      IconButton(
+        icon: Icon(
+          isDark
+              ? Icons.light_mode_outlined
+              : Icons.dark_mode_outlined,
+        ),
+        visualDensity: VisualDensity.compact,
+        tooltip: isDark
+            ? 'Switch to light mode'
+            : 'Switch to dark mode',
+        onPressed: _themeService.toggleTheme,
+      ),
+      const VerticalDivider(width: 1, indent: 8, endIndent: 8),
+      IconButton(
+        icon: const Icon(Icons.note_add_outlined),
+        visualDensity: VisualDensity.compact,
+        tooltip: 'New text document',
+        onPressed: _createNewDocument,
+      ),
+      const VerticalDivider(width: 1, indent: 8, endIndent: 8),
+      IconButton(
+        icon: const Icon(Icons.folder_open_outlined),
+        visualDensity: VisualDensity.compact,
+        tooltip: 'Open file',
+        onPressed: () => _openFile(context),
+      ),
+      ListenableBuilder(
+        listenable: _documentHistoryService,
+        builder: (context, _) {
+          final recentDocuments =
+              _documentHistoryService.recentDocuments;
+          final hasRecents = recentDocuments.isNotEmpty;
+          return PopupMenuButton<RecentDocumentEntry>(
+            tooltip: 'Recent documents',
+            enabled: hasRecents,
+            onSelected: (entry) =>
+                _openRecentDocument(context, entry),
+            itemBuilder: (context) {
+              return recentDocuments
+                  .map((entry) {
+                    return PopupMenuItem<RecentDocumentEntry>(
+                      value: entry,
+                      child: Tooltip(
+                        message: entry.path,
+                        waitDuration: const Duration(
+                          milliseconds: 700,
+                        ),
+                        child: SizedBox(
+                          width: 260,
+                          child: Text(
+                            entry.title,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                    );
+                  })
+                  .toList(growable: false);
+            },
+            child: Icon(
+              Icons.history_outlined,
+              color: hasRecents
+                  ? null
+                  : Theme.of(context).colorScheme.onSurface
+                        .withValues(alpha: 0.38),
+            ),
+          );
+        },
+      ),
+      const SizedBox(width: 6),
+    ];
+  }
+
+  Widget _buildMobileActionButton(BuildContext context, bool isDark) {
+    return PopupMenuButton(
+      icon: const Icon(Icons.more_vert),
+      tooltip: 'Menu',
+      itemBuilder: (menuContext) {
+        final List<PopupMenuEntry<void>> items = [
+          PopupMenuItem(
+            onTap: _themeService.toggleTheme,
+            child: Row(
+              children: [
+                Icon(
+                  isDark
+                      ? Icons.light_mode_outlined
+                      : Icons.dark_mode_outlined,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Text(isDark ? 'Light mode' : 'Dark mode'),
+              ],
+            ),
+          ),
+          const PopupMenuDivider(),
+          PopupMenuItem(
+            onTap: _createNewDocument,
+            child: const Row(
+              children: [
+                Icon(Icons.note_add_outlined, size: 20),
+                SizedBox(width: 12),
+                Text('New document'),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            onTap: () => _openFile(context),
+            child: const Row(
+              children: [
+                Icon(Icons.folder_open_outlined, size: 20),
+                SizedBox(width: 12),
+                Text('Open file'),
+              ],
+            ),
+          ),
+        ];
+
+        final recentDocuments =
+            _documentHistoryService.recentDocuments;
+        if (recentDocuments.isNotEmpty) {
+          items.add(const PopupMenuDivider());
+          items.add(
+            PopupMenuItem(
+              enabled: false,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 4,
+              ),
+              child: Text(
+                'Recent documents',
+                style: Theme.of(
+                  menuContext,
+                ).textTheme.labelMedium?.copyWith(
+                  color:
+                      Theme.of(menuContext).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          );
+          for (final entry in recentDocuments) {
+            items.add(
+              PopupMenuItem(
+                onTap: () =>
+                    _openRecentDocument(context, entry),
+                child: SizedBox(
+                  width: 260,
+                  child: Text(
+                    entry.title,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            );
+          }
+        }
+
+        return items;
       },
     );
   }
@@ -374,7 +484,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
 }
 
 /// Horizontally scrollable tab bar.
-class _TabBar extends StatelessWidget {
+class _TabBar extends StatefulWidget {
   final List<TabModel> tabs;
   final int activeIndex;
   final ValueChanged<int> onSelect;
@@ -388,35 +498,64 @@ class _TabBar extends StatelessWidget {
   });
 
   @override
+  State<_TabBar> createState() => _TabBarState();
+}
+
+class _TabBarState extends State<_TabBar> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return SizedBox(
       height: 46,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: tabs.length,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        itemBuilder: (context, index) {
-          final tab = tabs[index];
-          final isActive = index == activeIndex;
+      child: Listener(
+        onPointerSignal: (event) {
+          if (event is PointerScrollEvent) {
+            final delta = event.scrollDelta.dy;
+            if (delta != 0) {
+              _scrollController.jumpTo(
+                (_scrollController.offset + delta).clamp(
+                  _scrollController.position.minScrollExtent,
+                  _scrollController.position.maxScrollExtent,
+                ),
+              );
+            }
+          }
+        },
+        child: ListView.builder(
+          controller: _scrollController,
+          scrollDirection: Axis.horizontal,
+          itemCount: widget.tabs.length,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          itemBuilder: (context, index) {
+            final tab = widget.tabs[index];
+            final isActive = index == widget.activeIndex;
 
-          return GestureDetector(
-            onTap: () => onSelect(index),
-            child: Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: Align(
-                alignment: Alignment.bottomLeft,
-                child: _TabChip(
-                  tab: tab,
-                  isActive: isActive,
-                  colorScheme: colorScheme,
-                  onClose: () => onClose(index),
+            return GestureDetector(
+              onTap: () => widget.onSelect(index),
+              child: Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Align(
+                  alignment: Alignment.bottomLeft,
+                  child: _TabChip(
+                    tab: tab,
+                    isActive: isActive,
+                    colorScheme: colorScheme,
+                    onClose: () => widget.onClose(index),
+                  ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
@@ -432,29 +571,32 @@ class _EmptyState extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
 
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.menu_book_outlined,
-            size: 64,
-            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Welcome to Hankan Chinese Reader',
-            style: textTheme.headlineSmall?.copyWith(
-              color: colorScheme.onSurfaceVariant,
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.menu_book_outlined,
+              size: 64,
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Create a new document or open an existing file to get started.',
-            style: textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+            const SizedBox(height: 16),
+            Text(
+              'Welcome to Hankan Chinese Reader',
+              style: textTheme.headlineSmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              'Create a new document or open an existing file to get started.',
+              style: textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

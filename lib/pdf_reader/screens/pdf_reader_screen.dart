@@ -11,6 +11,7 @@ import 'package:pdfrx/pdfrx.dart';
 import 'package:hankan_chinese_reader/core/service_locator.dart';
 import 'package:hankan_chinese_reader/core/services/tab_service.dart';
 import 'package:hankan_chinese_reader/pdf_reader/services/pdf_ocr_service.dart';
+import 'package:hankan_chinese_reader/pdf_reader/widgets/pdf_search_bar.dart';
 import 'package:hankan_chinese_reader/pdf_reader/widgets/pdf_text_overlay.dart';
 import 'package:hankan_chinese_reader/pdf_reader/widgets/pdf_toolbar.dart';
 import 'package:hankan_chinese_reader/pdf_reader/widgets/pdf_thumbnail_sidebar.dart';
@@ -532,11 +533,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                           _showThumbnails;
                       _tabService.notifyTabStateChanged();
                     },
-                    showSearchBar: _showSearchBar,
                     onActivateSearch: _activateSearch,
-                    onCloseSearch: () => _setShowSearch(false),
-                    searchController: _searchController,
-                    searchFocusNode: _searchFocusNode,
                     textSearcher: _textSearcher,
                     currentPage: _currentPage,
                     pageCount: _pageCount,
@@ -548,10 +545,19 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                     canToggleOcr: _pdfOcrService.isSupported || kIsWeb,
                     onOcrChanged: _handleOcrToggleRequested,
                     showOcrProgress: _isPerformingOcrLookup,
-                    onSearchChanged: (value) {
-                      _tabService.findTab(widget.tabId).pdfSearchQuery = value;
-                    },
                   ),
+                  if (_showSearchBar && _textSearcher != null)
+                    PdfSearchBar(
+                      controller: _searchController,
+                      focusNode: _searchFocusNode,
+                      textSearcher: _textSearcher!,
+                      onClose: () => _setShowSearch(false),
+                      onSearchChanged: (value) {
+                        _tabService
+                            .findTab(widget.tabId)
+                            .pdfSearchQuery = value;
+                      },
+                    ),
                   Expanded(
                     child: Row(
                       children: [
@@ -560,6 +566,9 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                             filePath: _filePath!,
                             currentPage: _currentPage,
                             onPageTapped: _jumpToPage,
+                            width: MediaQuery.of(context).size.width < 600
+                                ? 120
+                                : 160,
                           ),
                         Expanded(
                           child: Listener(

@@ -105,10 +105,13 @@ class TextReadView extends StatelessWidget {
 
     if (text.isEmpty) {
       return Center(
-        child: Text(
-          'No text to display. Switch to edit mode to add text.',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            'No text to display. Switch to edit mode to add text.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+            ),
           ),
         ),
       );

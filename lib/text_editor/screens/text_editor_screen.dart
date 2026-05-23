@@ -576,93 +576,189 @@ class _Toolbar extends StatelessWidget {
           bottom: BorderSide(color: colorScheme.outlineVariant, width: 0.5),
         ),
       ),
-      child: Row(
-        children: [
-          // Edit / Read toggle
-          TextButton.icon(
-            icon: Icon(
-              isReadMode ? Icons.edit_outlined : Icons.auto_stories,
-              size: 18,
-            ),
-            label: Text(isReadMode ? 'Edit' : 'Read'),
-            onPressed: onToggleMode,
-            style: TextButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-            ),
+      child: LayoutBuilder(builder: (context, constraints) {
+        if (constraints.maxWidth >= 400) {
+          return _buildDesktopBar(context, colorScheme);
+        }
+        if (isReadMode) {
+          return _buildMobileBar(context, colorScheme, showSearchInline: true);
+        }
+        return _buildMobileBar(
+          context,
+          colorScheme,
+          showSearchInline: constraints.maxWidth >= 370,
+        );
+      }),
+    );
+  }
+
+  Widget _buildDesktopBar(BuildContext context, ColorScheme colorScheme) {
+    return Row(
+      children: [
+        // Edit / Read toggle
+        TextButton.icon(
+          icon: Icon(
+            isReadMode ? Icons.edit_outlined : Icons.auto_stories,
+            size: 18,
+          ),
+          label: Text(isReadMode ? 'Edit' : 'Read'),
+          onPressed: onToggleMode,
+          style: TextButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+          ),
+        ),
+        const VerticalDivider(indent: 10, endIndent: 10),
+
+        if (!isReadMode) ...[
+          IconButton(
+            icon: const Icon(Icons.undo),
+            tooltip: 'Undo (Ctrl+Z)',
+            onPressed: onUndo,
+            iconSize: 18,
+            visualDensity: VisualDensity.compact,
+          ),
+          IconButton(
+            icon: const Icon(Icons.redo),
+            tooltip: 'Redo (Ctrl+Shift+Z)',
+            onPressed: onRedo,
+            iconSize: 18,
+            visualDensity: VisualDensity.compact,
           ),
           const VerticalDivider(indent: 10, endIndent: 10),
+        ],
 
-          if (!isReadMode) ...[
-            IconButton(
-              icon: const Icon(Icons.undo),
-              tooltip: 'Undo (Ctrl+Z)',
-              onPressed: onUndo,
-              iconSize: 18,
-              visualDensity: VisualDensity.compact,
-            ),
-            IconButton(
-              icon: const Icon(Icons.redo),
-              tooltip: 'Redo (Ctrl+Shift+Z)',
-              onPressed: onRedo,
-              iconSize: 18,
-              visualDensity: VisualDensity.compact,
-            ),
-            const VerticalDivider(indent: 10, endIndent: 10),
-          ],
+        IconButton(
+          icon: const Icon(Icons.search),
+          tooltip: 'Search (Ctrl+F)',
+          onPressed: onSearch,
+          iconSize: 18,
+          visualDensity: VisualDensity.compact,
+        ),
+        const VerticalDivider(indent: 10, endIndent: 10),
+        IconButton(
+          icon: const Icon(Icons.remove, size: 18),
+          tooltip: 'Decrease text size (Ctrl + Minus)',
+          onPressed: canZoomOut ? onZoomOut : null,
+          visualDensity: VisualDensity.compact,
+        ),
+        IconButton(
+          icon: const Icon(Icons.add, size: 18),
+          tooltip: 'Increase text size (Ctrl + Plus)',
+          onPressed: canZoomIn ? onZoomIn : null,
+          visualDensity: VisualDensity.compact,
+        ),
+        IconButton(
+          icon: const Icon(Icons.save_outlined),
+          tooltip: 'Save (Ctrl+S)',
+          onPressed: onSave,
+          iconSize: 18,
+          visualDensity: VisualDensity.compact,
+        ),
 
+        const Spacer(),
+
+        // Mode badge
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: isReadMode
+                ? colorScheme.tertiaryContainer
+                : colorScheme.secondaryContainer,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            isReadMode ? 'Reading' : 'Editing',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: isReadMode
+                  ? colorScheme.onTertiaryContainer
+                  : colorScheme.onSecondaryContainer,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMobileBar(
+    BuildContext context,
+    ColorScheme colorScheme, {
+    bool showSearchInline = true,
+  }) {
+    return Row(
+      children: [
+        TextButton.icon(
+          icon: Icon(
+            isReadMode ? Icons.edit_outlined : Icons.auto_stories,
+            size: 18,
+          ),
+          label: Text(isReadMode ? 'Edit' : 'Read'),
+          onPressed: onToggleMode,
+          style: TextButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+          ),
+        ),
+        const VerticalDivider(indent: 10, endIndent: 10),
+        if (!isReadMode) ...[
+          IconButton(
+            icon: const Icon(Icons.undo),
+            tooltip: 'Undo',
+            onPressed: onUndo,
+            iconSize: 18,
+            visualDensity: VisualDensity.compact,
+          ),
+          IconButton(
+            icon: const Icon(Icons.redo),
+            tooltip: 'Redo',
+            onPressed: onRedo,
+            iconSize: 18,
+            visualDensity: VisualDensity.compact,
+          ),
+          const VerticalDivider(indent: 10, endIndent: 10),
+        ],
+        if (showSearchInline) ...[
           IconButton(
             icon: const Icon(Icons.search),
-            tooltip: 'Search (Ctrl+F)',
+            tooltip: 'Search',
             onPressed: onSearch,
             iconSize: 18,
             visualDensity: VisualDensity.compact,
           ),
           const VerticalDivider(indent: 10, endIndent: 10),
-          IconButton(
-            icon: const Icon(Icons.remove, size: 18),
-            tooltip: 'Decrease text size (Ctrl + Minus)',
-            onPressed: canZoomOut ? onZoomOut : null,
-            visualDensity: VisualDensity.compact,
-          ),
-          IconButton(
-            icon: const Icon(Icons.add, size: 18),
-            tooltip: 'Increase text size (Ctrl + Plus)',
-            onPressed: canZoomIn ? onZoomIn : null,
-            visualDensity: VisualDensity.compact,
-          ),
-          IconButton(
-            icon: const Icon(Icons.save_outlined),
-            tooltip: 'Save (Ctrl+S)',
-            onPressed: onSave,
-            iconSize: 18,
-            visualDensity: VisualDensity.compact,
-          ),
-
-          const Spacer(),
-
-          // Mode badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: isReadMode
-                  ? colorScheme.tertiaryContainer
-                  : colorScheme.secondaryContainer,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              isReadMode ? 'Reading' : 'Editing',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: isReadMode
-                    ? colorScheme.onTertiaryContainer
-                    : colorScheme.onSecondaryContainer,
-              ),
-            ),
-          ),
         ],
-      ),
+        IconButton(
+          icon: const Icon(Icons.remove, size: 18),
+          tooltip: 'Decrease text size',
+          onPressed: canZoomOut ? onZoomOut : null,
+          visualDensity: VisualDensity.compact,
+        ),
+        IconButton(
+          icon: const Icon(Icons.add, size: 18),
+          tooltip: 'Increase text size',
+          onPressed: canZoomIn ? onZoomIn : null,
+          visualDensity: VisualDensity.compact,
+        ),
+        const Spacer(),
+        if (!isReadMode)
+          PopupMenuButton(
+            icon: const Icon(Icons.more_vert, size: 18),
+            tooltip: 'More',
+            itemBuilder: (context) => [
+              if (!showSearchInline)
+                PopupMenuItem(
+                  onTap: onSearch,
+                  child: const Text('Search'),
+                ),
+              PopupMenuItem(
+                onTap: onSave,
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+      ],
     );
   }
 }
