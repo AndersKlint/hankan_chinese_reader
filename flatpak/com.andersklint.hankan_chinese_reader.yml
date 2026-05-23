@@ -1,0 +1,36 @@
+app-id: com.andersklint.hankan_chinese_reader
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: hankan_chinese_reader
+appstream-compose: false
+
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  - --filesystem=host:rw
+  - --socket=session-bus
+
+modules:
+  - name: hankan_chinese_reader
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app /app/bin
+      - cp -r build/linux/x64/release/bundle/* /app/
+      - chmod +x /app/hankan_chinese_reader
+      - printf '#!/bin/sh\nexec /app/hankan_chinese_reader "$@"' > /app/bin/hankan_chinese_reader
+      - chmod +x /app/bin/hankan_chinese_reader
+      - install -Dm644 flatpak/com.andersklint.hankan_chinese_reader.desktop
+        /app/share/applications/com.andersklint.hankan_chinese_reader.desktop
+      - install -Dm644 flatpak/com.andersklint.hankan_chinese_reader.png
+        /app/share/icons/hicolor/256x256/apps/com.andersklint.hankan_chinese_reader.png
+      - install -Dm644 flatpak/com.andersklint.hankan_chinese_reader.metainfo.xml
+        /app/share/metainfo/com.andersklint.hankan_chinese_reader.metainfo.xml
+      - install -Dm644 LICENSE
+        /app/share/licenses/com.andersklint.hankan_chinese_reader/LICENSE
+    sources:
+      - type: dir
+        path: ..

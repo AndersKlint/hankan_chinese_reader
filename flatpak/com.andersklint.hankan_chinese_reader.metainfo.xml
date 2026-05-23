@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop">
+  <id>com.andersklint.hankan_chinese_reader</id>
+  <name>HanKan - Chinese Reader</name>
+  <summary>A Chinese reading assistant with popup dictionary support</summary>
+  <description>
+    <p>HanKan is a Chinese reading assistant with popup dictionary support. It helps you read Chinese texts by providing instant dictionary lookups for unfamiliar words.</p>
+  </description>
+  <project_license>MIT</project_license>
+  <url type="homepage">https://github.com/AndersKlint/hankan_chinese_reader</url>
+  <categories>
+    <category>Utility</category>
+    <category>Education</category>
+  </categories>
+  <releases>
+    <release version="1.0.0" date="2025-01-01"/>
+  </releases>
+</component>

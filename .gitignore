@@ -39,6 +39,12 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
+# Flatpak build artifacts
+/.flatpak-builder/
+/build-dir/
+/repo/
+*.flatpak
+
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile

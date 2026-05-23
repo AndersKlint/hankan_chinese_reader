@@ -45,8 +45,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: f8fb40bec22d2535a31585df12a5f0b42ea576e1
-      resolved-ref: f8fb40bec22d2535a31585df12a5f0b42ea576e1
+      ref: bbfac9d1f4a633169281023a3faf0ba420eab757
+      resolved-ref: bbfac9d1f4a633169281023a3faf0ba420eab757
       url: "https://github.com/AndersKlint/flutter_package_chinese_popup_dict.git"
     source: git
     version: "0.0.1"
@@ -110,8 +110,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: a8c3097220978a006a6821826e5b24d98bc0e867
-      resolved-ref: a8c3097220978a006a6821826e5b24d98bc0e867
+      ref: "96da79d935b95f1475bf8734091da7fefd737b19"
+      resolved-ref: "96da79d935b95f1475bf8734091da7fefd737b19"
       url: "https://github.com/AndersKlint/dart_paddle_ocr.git"
     source: git
     version: "0.0.1"

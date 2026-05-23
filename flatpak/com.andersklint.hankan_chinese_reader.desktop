@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=HanKan - Chinese Reader
+Comment=A Chinese reading assistant with popup dictionary support
+Exec=hankan_chinese_reader
+Type=Application
+Categories=Utility;Education;
+Icon=com.andersklint.hankan_chinese_reader
+Terminal=false
+StartupNotify=true
