@@ -3,6 +3,7 @@ import 'package:hankan_chinese_reader/core/service_locator.dart';
 import 'package:hankan_chinese_reader/core/screens/home_screen.dart';
 import 'package:hankan_chinese_reader/core/services/theme_service.dart';
 import 'package:hankan_chinese_reader/core/theme/app_theme.dart';
+import 'package:hankan_chinese_reader/core/utils/platform.dart';
 import 'package:logging/logging.dart';
 import 'package:window_manager/window_manager.dart'
     if (dart.library.html) 'package:hankan_chinese_reader/core/stubs/window_manager_stub.dart';
@@ -16,8 +17,11 @@ void main() async {
   });
 
   await setupServiceLocator();
-  await windowManager.ensureInitialized();
-  await windowManager.setPreventClose(true);
+
+  if (isDesktop) {
+    await windowManager.ensureInitialized();
+    await windowManager.setPreventClose(true);
+  }
 
   runApp(const HankanApp());
 }

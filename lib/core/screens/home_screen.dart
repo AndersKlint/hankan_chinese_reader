@@ -9,6 +9,7 @@ import 'package:hankan_chinese_reader/core/services/document_history_service.dar
 import 'package:hankan_chinese_reader/core/services/file_service.dart';
 import 'package:hankan_chinese_reader/core/services/tab_service.dart';
 import 'package:hankan_chinese_reader/core/services/theme_service.dart';
+import 'package:hankan_chinese_reader/core/utils/platform.dart';
 import 'package:hankan_chinese_reader/core/widgets/unsaved_changes_dialogs.dart';
 import 'package:hankan_chinese_reader/text_editor/screens/text_editor_screen.dart';
 import 'package:hankan_chinese_reader/text_editor/services/text_editor_service_registry.dart';
@@ -54,14 +55,17 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
       // Defer close() to a fresh microtask. On Linux gtk_window_close()
       // synchronously emits another delete-event; deferring avoids re-entrant
       // close processing and the use-after-free segfault that follows.
-      unawaited(() async {
-        await windowManager.setPreventClose(false);
-        await windowManager.close();
-      }());
+      unawaited(_closeWindow());
       return;
     }
 
     _confirmCloseWithUnsavedChanges();
+  }
+
+  Future<void> _closeWindow() async {
+    if (!isDesktop) return;
+    await windowManager.setPreventClose(false);
+    await windowManager.close();
   }
 
   Future<void> _confirmCloseWithUnsavedChanges() async {
@@ -78,8 +82,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
 
     if (shouldExit) {
       _isClosing = true;
-      await windowManager.setPreventClose(false);
-      await windowManager.close();
+      await _closeWindow();
     }
   }
 
