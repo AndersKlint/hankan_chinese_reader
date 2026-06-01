@@ -14,6 +14,7 @@ import 'package:hankan_chinese_reader/pdf_reader/services/pdf_ocr_service.dart';
 import 'package:hankan_chinese_reader/pdf_reader/widgets/pdf_search_bar.dart';
 import 'package:hankan_chinese_reader/pdf_reader/widgets/pdf_text_overlay.dart';
 import 'package:hankan_chinese_reader/pdf_reader/widgets/pdf_toolbar.dart';
+import 'package:hankan_chinese_reader/pdf_reader/services/pdf_auto_scroll_controller.dart';
 import 'package:hankan_chinese_reader/pdf_reader/widgets/pdf_thumbnail_sidebar.dart';
 
 /// Screen for reading a PDF document with popup dictionary support and desktop features.
@@ -59,8 +60,19 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   static const double _zoomStep = 1.1;
   static const double _scrollZoomSensitivity = 0.002;
 
+  late final PdfAutoScrollController _autoScrollController;
+
   @override
   void initState() {
+    super.initState();
+    _autoScrollController = PdfAutoScrollController(
+      controller: _pdfController,
+      getViewportSize: () {
+        final box = _pdfViewerKey.currentContext?.findRenderObject() as RenderBox?;
+        return box?.size ?? Size.zero;
+      },
+    );
+
     super.initState();
     _tabService = getIt<TabService>();
     _documentHistoryService = getIt<DocumentHistoryService>();
@@ -79,6 +91,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
 
   @override
   void dispose() {
+    _autoScrollController.dispose();
     _saveViewStateDebounce?.cancel();
     _restoreLockTimer?.cancel();
     _restoreLockCenter = null;
@@ -553,9 +566,8 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                       textSearcher: _textSearcher!,
                       onClose: () => _setShowSearch(false),
                       onSearchChanged: (value) {
-                        _tabService
-                            .findTab(widget.tabId)
-                            .pdfSearchQuery = value;
+                        _tabService.findTab(widget.tabId).pdfSearchQuery =
+                            value;
                       },
                     ),
                   Expanded(
@@ -572,8 +584,13 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                           ),
                         Expanded(
                           child: Listener(
+                            behavior: HitTestBehavior.translucent,
                             onPointerSignal: _onPointerSignal,
                             onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
+                            onPointerDown: _autoScrollController.handlePointerDown,
+                            onPointerMove: _autoScrollController.handlePointerMove,
+                            onPointerUp: (_) => _autoScrollController.handlePointerUp(),
+                            onPointerCancel: _autoScrollController.handlePointerCancel,
                             child: RepaintBoundary(
                               key: _pdfViewerKey,
                               child: PdfViewer.file(
