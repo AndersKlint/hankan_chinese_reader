@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:hankan_chinese_reader/core/service_locator.dart';
 import 'package:hankan_chinese_reader/core/screens/home_screen.dart';
 import 'package:hankan_chinese_reader/core/services/theme_service.dart';
@@ -43,6 +44,9 @@ class HankanApp extends StatelessWidget {
           theme: AppTheme.light,
           darkTheme: AppTheme.dark,
           themeMode: themeService.value,
+          localizationsDelegates:
+              FlutterQuillLocalizations.localizationsDelegates,
+          supportedLocales: FlutterQuillLocalizations.supportedLocales,
           home: const HomeScreen(),
         );
       },

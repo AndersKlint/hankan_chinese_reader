@@ -1,211 +1,165 @@
-import 'dart:collection';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:hankan_chinese_reader/core/services/file_service.dart';
 import 'package:hankan_chinese_reader/core/services/tab_service.dart';
+import 'package:hankan_chinese_reader/text_editor/services/document_codec.dart';
+import 'package:logging/logging.dart';
 
-/// Manages text content and undo/redo state for a text editor tab.
 class TextEditorService {
-  /// The current text content.
-  final ValueNotifier<String> content = ValueNotifier<String>('');
-
-  /// Whether the document has been modified since last save.
-  final ValueNotifier<bool> isModified = ValueNotifier<bool>(false);
-
-  /// Whether the editor is in read mode (popup dict active).
-  final ValueNotifier<bool> isReadMode = ValueNotifier<bool>(false);
-
+  final QuillController controller = QuillController.basic();
+  final ValueNotifier<String> content = ValueNotifier('');
+  final ValueNotifier<bool> isModified = ValueNotifier(false);
+  final ValueNotifier<bool> isReadMode = ValueNotifier(false);
+  final ValueNotifier<int> revision = ValueNotifier(0);
   final FileService? _fileService;
   final TabService? _tabService;
-
-  final Queue<String> _undoStack = Queue<String>();
-  final Queue<String> _redoStack = Queue<String>();
-
+  final DocumentCodec _codec = DocumentCodec();
+  final Logger _logger = Logger('TextEditorService');
+  StreamSubscription<DocChange>? _subscription;
   String _savedContent = '';
   String? _tabId;
-  DateTime? _typingBurstStartedAt;
-  DateTime? _lastTypingEditAt;
+  String? _filePath;
+  bool _disposed = false;
 
-  static const int _maxUndoHistory = 500;
-  static const Duration _typingUndoMergeWindow = Duration(milliseconds: 800);
-
-  /// Creates a new service. [fileService] and [tabService] are optional so
-  /// unit tests can construct the service without a full DI container.
   TextEditorService({this._fileService, this._tabService});
 
-  /// Initializes the service with the given [text].
+  String get serializedContent => _codec.toMarkdown(controller.document);
+  bool get canUndo => controller.hasUndo;
+  bool get canRedo => controller.hasRedo;
+  bool get isBold =>
+      controller.getSelectionStyle().attributes['bold']?.value == true;
+  bool get isItalic =>
+      controller.getSelectionStyle().attributes['italic']?.value == true;
+  int? get headingLevel {
+    final value = controller.getSelectionStyle().attributes['header']?.value;
+    return value == 1 || value == 2 || value == 3 ? value as int : null;
+  }
+
   void initialize(
     String text, {
     required bool isReadMode,
     String? tabId,
     String? filePath,
+    bool isMarkdown = false,
   }) {
-    _savedContent = text;
-    content.value = text;
-    isModified.value = false;
-    this.isReadMode.value = isReadMode;
+    _subscription?.cancel();
+    final previous = controller.document;
+    controller.document = isMarkdown
+        ? _codec.fromMarkdown(text)
+        : _codec.fromPlainText(text);
+    previous.close();
+    controller.forceToggledStyle(const Style());
     _tabId = tabId;
-    _undoStack.clear();
-    _redoStack.clear();
-    _resetTypingUndoCoalescing();
+    _filePath = filePath;
+    this.isReadMode.value = isReadMode;
+    controller.readOnly = isReadMode;
+    _savedContent = serializedContent;
+    _subscription = controller.changes.listen((_) => _documentChanged());
+    _documentChanged(notifyTab: false);
   }
 
-  /// Applies a user edit and records undo history.
-  ///
-  /// Rapid single-character insertions are merged into one undo step so normal
-  /// typing behaves more like a desktop editor. Other edits, such as paste,
-  /// deletion, or replacement, always create their own undo step.
-  void applyUserEdit(String text, {DateTime? timestamp}) {
-    final previousText = content.value;
-    if (text == previousText) {
-      return;
-    }
-
-    final editTime = timestamp ?? DateTime.now();
-    final isTypingInsertion = _isSingleCharacterInsertion(previousText, text);
-    final shouldMergeIntoPreviousTyping =
-        isTypingInsertion && _shouldMergeTypingUndo(editTime);
-
-    if (!shouldMergeIntoPreviousTyping) {
-      _pushUndoState(previousText);
-    } else {
-      _redoStack.clear();
-    }
-
-    updateContent(text);
-    if (isTypingInsertion) {
-      if (!shouldMergeIntoPreviousTyping) {
-        _typingBurstStartedAt = editTime;
-      }
-      _lastTypingEditAt = editTime;
-    } else {
-      _resetTypingUndoCoalescing();
-    }
+  void _documentChanged({bool notifyTab = true}) {
+    final plainText = controller.document.toPlainText();
+    content.value = plainText.substring(0, plainText.length - 1);
+    isModified.value = serializedContent != _savedContent;
+    revision.value++;
+    _syncTab(notify: notifyTab);
   }
 
-  void _pushUndoState(String text) {
-    _undoStack.addLast(text);
-    if (_undoStack.length > _maxUndoHistory) {
-      _undoStack.removeFirst();
-    }
-    _redoStack.clear();
-  }
-
-  bool _shouldMergeTypingUndo(DateTime editTime) {
-    final typingBurstStartedAt = _typingBurstStartedAt;
-    final lastTypingEditAt = _lastTypingEditAt;
-    if (typingBurstStartedAt == null || lastTypingEditAt == null) {
-      return false;
-    }
-    return editTime.difference(lastTypingEditAt) <= _typingUndoMergeWindow &&
-        editTime.difference(typingBurstStartedAt) <= _typingUndoMergeWindow;
-  }
-
-  bool _isSingleCharacterInsertion(String previousText, String nextText) {
-    if (nextText.length != previousText.length + 1) {
-      return false;
-    }
-
-    var prefixLength = 0;
-    while (prefixLength < previousText.length &&
-        previousText.codeUnitAt(prefixLength) ==
-            nextText.codeUnitAt(prefixLength)) {
-      prefixLength++;
-    }
-
-    final suffixLength = previousText.length - prefixLength;
-    for (var index = 0; index < suffixLength; index++) {
-      if (previousText.codeUnitAt(previousText.length - 1 - index) !=
-          nextText.codeUnitAt(nextText.length - 1 - index)) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  void _resetTypingUndoCoalescing() {
-    _typingBurstStartedAt = null;
-    _lastTypingEditAt = null;
-  }
-
-  /// Updates the current text content and marks as modified.
-  void updateContent(String text) {
-    content.value = text;
-    isModified.value = text != _savedContent;
-  }
-
-  /// Whether undo is available.
-  bool get canUndo => _undoStack.isNotEmpty;
-
-  /// Whether redo is available.
-  bool get canRedo => _redoStack.isNotEmpty;
-
-  /// Undoes the last change.
-  void undo() {
-    if (!canUndo) return;
-    _resetTypingUndoCoalescing();
-    _redoStack.addLast(content.value);
-    content.value = _undoStack.removeLast();
-    isModified.value = content.value != _savedContent;
-  }
-
-  /// Redoes the previously undone change.
-  void redo() {
-    if (!canRedo) return;
-    _resetTypingUndoCoalescing();
-    _undoStack.addLast(content.value);
-    content.value = _redoStack.removeLast();
-    isModified.value = content.value != _savedContent;
-  }
-
-  /// Marks the content as saved.
-  void markSaved() {
-    _savedContent = content.value;
-    isModified.value = false;
-  }
-
-  /// Toggles between edit and read mode.
-  void toggleReadMode() {
-    isReadMode.value = !isReadMode.value;
-  }
-
-  /// Saves the current content to disk. Returns `true` if the file was saved
-  /// (or already saved), `false` if the user cancelled the save dialog.
-  Future<bool> save() async {
-    final fileService = _fileService;
+  void _syncTab({bool notify = true}) {
     final tabService = _tabService;
     final tabId = _tabId;
-    if (fileService == null || tabService == null || tabId == null) {
-      return false;
-    }
-
+    if (tabService == null || tabId == null) return;
     final tab = tabService.findTab(tabId);
-
-    final savedPath = await fileService.saveTextFile(
-      content: content.value,
-      existingPath: tab.filePath,
-    );
-
-    if (savedPath != null) {
-      tab.filePath = savedPath;
-      tab.textContent = content.value;
-      final fileName = savedPath.split('/').last.split('\\').last;
-      tabService.setTitle(tabId, fileName);
-      markSaved();
-      return true;
+    tab.textContent = serializedContent;
+    tab.textIsMarkdown = true;
+    if (notify) {
+      tabService.setModified(tabId, modified: isModified.value);
+    } else {
+      tab.isModified = isModified.value;
     }
-
-    return false;
   }
 
-  /// Releases resources held by this service.
-  ///
-  /// Must be called when the owning widget is disposed to prevent
-  /// [ValueNotifier] listener leaks.
+  void toggleBold() => controller.formatSelection(
+    Attribute.clone(Attribute.bold, isBold ? null : true),
+  );
+  void toggleItalic() => controller.formatSelection(
+    Attribute.clone(Attribute.italic, isItalic ? null : true),
+  );
+  void setHeading(int? level) {
+    if (level != null && level != 1 && level != 2 && level != 3) {
+      throw ArgumentError.value(level, 'level');
+    }
+    controller.formatSelection(Attribute.clone(Attribute.header, level));
+  }
+
+  void undo() {
+    if (canUndo) controller.undo();
+  }
+
+  void redo() {
+    if (canRedo) controller.redo();
+  }
+
+  void toggleReadMode() {
+    isReadMode.value = !isReadMode.value;
+    controller.readOnly = isReadMode.value;
+  }
+
+  Future<bool> save() async {
+    final fileService = _fileService;
+    if (fileService == null) return false;
+    final snapshot = serializedContent;
+    final document = controller.document;
+    final plainSnapshot = document.toPlainText();
+    final path = _filePath;
+    final isText = path?.toLowerCase().endsWith('.txt') ?? false;
+    final asMarkdown = !isText || _codec.hasFormatting(document);
+    final forceSaveAs = isText && asMarkdown;
+    final baseName = path?.split(RegExp(r'[/\\]')).last ?? 'document.md';
+    try {
+      final savedPath = await fileService.saveTextFile(
+        content: asMarkdown
+            ? snapshot
+            : plainSnapshot.substring(0, plainSnapshot.length - 1),
+        existingPath: forceSaveAs ? null : path,
+        fileName: forceSaveAs
+            ? baseName.replaceFirst(
+                RegExp(r'\.txt$', caseSensitive: false),
+                '.md',
+              )
+            : baseName,
+        asMarkdown: asMarkdown,
+      );
+      if (savedPath == null || _disposed || controller.document != document) {
+        return false;
+      }
+      _filePath = savedPath;
+      _savedContent = snapshot;
+      isModified.value = serializedContent != snapshot;
+      final tabService = _tabService;
+      final tabId = _tabId;
+      if (tabService != null && tabId != null) {
+        tabService.findTab(tabId).filePath = savedPath;
+        tabService.setTitle(tabId, savedPath.split(RegExp(r'[/\\]')).last);
+      }
+      _syncTab();
+      return true;
+    } catch (error, stackTrace) {
+      _logger.severe('Could not save document', error, stackTrace);
+      rethrow;
+    }
+  }
+
   void dispose() {
+    _disposed = true;
+    _subscription?.cancel();
+    controller.dispose();
     content.dispose();
     isModified.dispose();
     isReadMode.dispose();
+    revision.dispose();
   }
 }

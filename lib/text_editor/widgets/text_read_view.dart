@@ -1,156 +1,136 @@
+import 'dart:math' as math;
+
 import 'package:chinese_popup_dict/chinese_popup_dict.dart';
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
+import 'package:flutter_quill/flutter_quill.dart' show Document;
 import 'package:hankan_chinese_reader/text_editor/models/text_search_result.dart';
 import 'package:hankan_chinese_reader/text_editor/widgets/text_content_style.dart';
+import 'package:hankan_chinese_reader/text_editor/widgets/text_document_spans.dart';
 
-/// Read-only text view with the popup dictionary active.
-class TextReadView extends StatelessWidget {
-  /// The text content to display.
+class TextReadView extends StatefulWidget {
   final String text;
-
-  /// Current search query.
-  final String searchQuery;
-
-  /// All search matches.
+  final Document document;
   final List<TextSearchResult> matches;
-
-  /// Active match index in [matches], or -1 when none.
   final int activeMatchIndex;
-
-  /// Scroll controller from parent for state persistence and jump-to-match.
   final ScrollController scrollController;
-
-  /// Scroll physics for the reader scroll view.
   final ScrollPhysics? scrollPhysics;
-
-  /// Key of the active match to scroll into view.
-  final GlobalKey? activeMatchKey;
-
-  /// Font size used by the reader content.
+  final Object? revealToken;
   final double fontSize;
 
   const TextReadView({
     super.key,
     required this.text,
-    required this.searchQuery,
+    required this.document,
     required this.matches,
     required this.activeMatchIndex,
     required this.scrollController,
-    this.scrollPhysics,
     required this.fontSize,
-    this.activeMatchKey,
+    this.scrollPhysics,
+    this.revealToken,
   });
 
-  List<InlineSpan> _buildHighlightedSpans(BuildContext context) {
-    final spans = <InlineSpan>[];
-    final baseStyle = textEditorContentTextStyle(context, fontSize: fontSize);
+  @override
+  State<TextReadView> createState() => _TextReadViewState();
+}
 
-    if (searchQuery.isEmpty || matches.isEmpty) {
-      spans.add(TextSpan(text: text, style: baseStyle));
-      return spans;
+class _TextReadViewState extends State<TextReadView> {
+  Object? _revealedToken;
+
+  void _revealMatch(TextPainter painter) {
+    if (_revealedToken == widget.revealToken ||
+        widget.activeMatchIndex < 0 ||
+        widget.activeMatchIndex >= widget.matches.length) {
+      return;
     }
-
-    int cursor = 0;
-    for (int i = 0; i < matches.length; i++) {
-      final match = matches[i];
-      if (match.start > cursor) {
-        spans.add(
-          TextSpan(text: text.substring(cursor, match.start), style: baseStyle),
-        );
-      }
-
-      final isActive = i == activeMatchIndex;
-      final highlightColor = isActive
-          ? Theme.of(context).colorScheme.primaryContainer
-          : Theme.of(context).colorScheme.secondaryContainer;
-      final matchText = text.substring(match.start, match.end);
-      if (isActive && activeMatchKey != null) {
-        spans.add(
-          WidgetSpan(
-            alignment: PlaceholderAlignment.baseline,
-            baseline: TextBaseline.alphabetic,
-            child: Container(
-              key: activeMatchKey,
-              decoration: BoxDecoration(
-                color: highlightColor,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(matchText, style: baseStyle),
-            ),
-          ),
-        );
-      } else {
-        spans.add(
-          TextSpan(
-            text: matchText,
-            style: baseStyle?.copyWith(backgroundColor: highlightColor),
-          ),
-        );
-      }
-
-      cursor = match.end;
-    }
-
-    if (cursor < text.length) {
-      spans.add(TextSpan(text: text.substring(cursor), style: baseStyle));
-    }
-
-    return spans;
+    _revealedToken = widget.revealToken;
+    final position = painter.getOffsetForCaret(
+      TextPosition(offset: widget.matches[widget.activeMatchIndex].start),
+      Rect.zero,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !widget.scrollController.hasClients) return;
+      final scroll = widget.scrollController;
+      final target =
+          (position.dy +
+                  textEditorContentPadding.top -
+                  scroll.position.viewportDimension * 0.22)
+              .clamp(0.0, scroll.position.maxScrollExtent);
+      scroll.animateTo(
+        target,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    if (text.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Text(
-            'No text to display. Switch to edit mode to add text.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+    final span = textDocumentSpans(
+      context,
+      document: widget.document,
+      text: widget.text,
+      fontSize: widget.fontSize,
+      matches: widget.matches,
+      activeMatchIndex: widget.activeMatchIndex,
+    );
+    final strut = textEditorContentStrutStyle(
+      context,
+      fontSize: widget.fontSize,
+    );
+    return TextEditorSurface(
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          controller: widget.scrollController,
+          physics: widget.scrollPhysics,
+          padding: textEditorContentPadding,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: math.max(
+                0,
+                constraints.maxHeight - textEditorContentPadding.vertical,
+              ),
+            ),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: double.infinity,
+                child: LayoutBuilder(
+                  builder: (context, contentConstraints) {
+                    if (widget.revealToken != _revealedToken &&
+                        widget.activeMatchIndex >= 0) {
+                      final painter = TextPainter(
+                        text: span,
+                        textDirection: Directionality.of(context),
+                        textScaler: MediaQuery.textScalerOf(context),
+                        strutStyle: strut,
+                        textHeightBehavior: textEditorContentTextHeightBehavior,
+                      )..layout(maxWidth: contentConstraints.maxWidth);
+                      _revealMatch(painter);
+                      painter.dispose();
+                    }
+                    if (widget.text.isEmpty) {
+                      return Text(
+                        'No text to display. Switch to edit mode to add text.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant
+                              .withValues(alpha: 0.6),
+                        ),
+                      );
+                    }
+                    return ChinesePopupDict(
+                      text: Text.rich(
+                        span,
+                        strutStyle: strut,
+                        textHeightBehavior: textEditorContentTextHeightBehavior,
+                        textWidthBasis: TextWidthBasis.parent,
+                      ),
+                    );
+                  },
+                ),
+              ),
             ),
           ),
         ),
-      );
-    }
-
-    return TextEditorSurface(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return SingleChildScrollView(
-            controller: scrollController,
-            physics: scrollPhysics,
-            padding: textEditorContentPadding,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: math.max(
-                  0,
-                  constraints.maxHeight - textEditorContentPadding.vertical,
-                ),
-              ),
-              child: Align(
-                alignment: Alignment.topLeft,
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ChinesePopupDict(
-                    text: Text.rich(
-                      TextSpan(children: _buildHighlightedSpans(context)),
-                      strutStyle: textEditorContentStrutStyle(
-                        context,
-                        fontSize: fontSize,
-                      ),
-                      textHeightBehavior: textEditorContentTextHeightBehavior,
-                      textWidthBasis: TextWidthBasis.parent,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
       ),
     );
   }

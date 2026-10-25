@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:logging/logging.dart';
 import 'package:hankan_chinese_reader/core/models/tab_model.dart';
 import 'package:hankan_chinese_reader/core/service_locator.dart';
 import 'package:hankan_chinese_reader/core/services/document_history_service.dart';
@@ -26,6 +27,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WindowListener {
+  static final _logger = Logger('HomeScreen');
   final Map<String, Widget> _tabBodies = <String, Widget>{};
   final TabService _tabService = getIt<TabService>();
   final ThemeService _themeService = getIt<ThemeService>();
@@ -203,9 +205,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
               Icons.history_outlined,
               color: hasRecents
                   ? null
-                  : Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.38),
+                  : Theme.of(context).colorScheme.onSurface
+                        .withValues(alpha: 0.38),
             ),
           );
         },
@@ -376,10 +377,23 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
       title: 'Untitled',
       type: DocumentType.text,
       textContent: '',
+      textIsMarkdown: true,
     );
   }
 
   Future<void> _openFile(BuildContext context) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    try {
+      await _pickAndOpenFile(context);
+    } catch (error, stackTrace) {
+      _logger.warning('Could not open picked file', error, stackTrace);
+      messenger
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('Could not open file.')));
+    }
+  }
+
+  Future<void> _pickAndOpenFile(BuildContext context) async {
     final fileService = getIt<FileService>();
     final file = await fileService.pickFile();
     if (file == null) return;
@@ -403,6 +417,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
       title: file.name,
       type: DocumentType.text,
       textContent: fileService.readTextFromBytes(bytes),
+      textIsMarkdown: _isMarkdown(file.name),
     );
   }
 
@@ -443,6 +458,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
             type: DocumentType.text,
             filePath: path,
             textContent: content,
+            textIsMarkdown: _isMarkdown(path),
           );
           break;
       }
@@ -453,7 +469,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
           type: type,
         ),
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      _logger.warning('Could not open document at $path', error, stackTrace);
       messenger
         ?..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text('Could not open "$title".')));
@@ -464,6 +481,11 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
     return name.toLowerCase().endsWith('.pdf')
         ? DocumentType.pdf
         : DocumentType.text;
+  }
+
+  bool _isMarkdown(String name) {
+    final path = Uri.tryParse(name)?.path.toLowerCase() ?? name.toLowerCase();
+    return path.endsWith('.md') || path.endsWith('.markdown');
   }
 }
 
@@ -574,7 +596,7 @@ class _EmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Create a new document or open an existing file to get started.',
+              'Create a new document or open a Markdown, text, or PDF file to get started.',
               style: textTheme.bodyMedium?.copyWith(
                 color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
               ),

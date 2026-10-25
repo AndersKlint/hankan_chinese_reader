@@ -1,120 +1,78 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:hankan_chinese_reader/text_editor/widgets/text_content_style.dart';
 
-/// Text editing view with a multi-line text field.
-class TextEditView extends StatefulWidget {
-  /// Initial text content.
-  final String initialText;
-
-  /// Called when text changes.
-  final ValueChanged<String> onChanged;
-
-  /// Persisted editor scroll controller.
+class TextEditView extends StatelessWidget {
+  final QuillController controller;
   final ScrollController scrollController;
-
-  /// Scroll physics used by the inner editable scroll view.
   final ScrollPhysics? scrollPhysics;
-
-  /// Focus node used to reveal active search hit in view.
   final FocusNode focusNode;
-
-  /// Current highlighted match selection.
-  final TextSelection? highlightedSelection;
-
-  /// Font size used by the editor content.
   final double fontSize;
+  final Future<void> Function() onPaste;
+  final Map<ShortcutActivator, Intent> shortcuts;
+  final Map<Type, Action<Intent>> actions;
 
   const TextEditView({
     super.key,
-    required this.initialText,
-    required this.onChanged,
+    required this.controller,
     required this.scrollController,
-    this.scrollPhysics,
     required this.focusNode,
     required this.fontSize,
-    this.highlightedSelection,
+    required this.onPaste,
+    required this.shortcuts,
+    required this.actions,
+    this.scrollPhysics,
   });
 
   @override
-  State<TextEditView> createState() => _TextEditViewState();
-}
-
-class _TextEditViewState extends State<TextEditView> {
-  late final TextEditingController _controller;
-  bool _ignoreChange = false;
-
-  TextStyle _textStyle(BuildContext context) {
-    return textEditorContentTextStyle(context, fontSize: widget.fontSize) ??
-        DefaultTextStyle.of(context).style.copyWith(fontSize: widget.fontSize);
-  }
-
-  StrutStyle _strutStyle(BuildContext context) {
-    final strutStyle = textEditorContentStrutStyle(
-      context,
-      fontSize: widget.fontSize,
-    );
-    return strutStyle ?? StrutStyle.fromTextStyle(_textStyle(context));
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.initialText);
-  }
-
-  @override
-  void didUpdateWidget(covariant TextEditView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.initialText != _controller.text) {
-      _ignoreChange = true;
-      _controller.text = widget.initialText;
-      _ignoreChange = false;
-    }
-
-    final selection = widget.highlightedSelection;
-    if (selection != null && selection != _controller.selection) {
-      final maxOffset = _controller.text.length;
-      final safeSelection = TextSelection(
-        baseOffset: selection.baseOffset.clamp(0, maxOffset),
-        extentOffset: selection.extentOffset.clamp(0, maxOffset),
-      );
-      _controller.selection = safeSelection;
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textStyle = _textStyle(context);
-
+    DefaultTextBlockStyle block(int? heading) => DefaultTextBlockStyle(
+      textEditorParagraphStyle(context, fontSize: fontSize, heading: heading),
+      const HorizontalSpacing(0, 0),
+      const VerticalSpacing(0, 0),
+      const VerticalSpacing(0, 0),
+      null,
+    );
     return TextEditorSurface(
-      child: Padding(
-        padding: textEditorContentPadding,
-        child: TextField(
-          controller: _controller,
-          focusNode: widget.focusNode,
-          scrollController: widget.scrollController,
-          scrollPhysics: widget.scrollPhysics,
-          maxLines: null,
+      child: QuillEditor(
+        controller: controller,
+        focusNode: focusNode,
+        scrollController: scrollController,
+        config: QuillEditorConfig(
+          padding: textEditorContentPadding,
           expands: true,
-          textAlign: TextAlign.start,
-          style: textStyle,
-          strutStyle: _strutStyle(context),
-          cursorColor: colorScheme.primary,
-          cursorWidth: 2.0,
-          cursorRadius: Radius.zero,
-          decoration: null, // Important: removes default decoration.
-          onChanged: (text) {
-            if (!_ignoreChange) {
-              widget.onChanged(text);
-            }
+          scrollPhysics: scrollPhysics,
+          onTapOutsideEnabled: false,
+          customShortcuts: shortcuts,
+          customActions: {
+            ...actions,
+            PasteTextIntent: CallbackAction<PasteTextIntent>(
+              onInvoke: (_) {
+                onPaste();
+                return null;
+              },
+            ),
           },
+          customStyles: DefaultStyles(
+            paragraph: block(null),
+            h1: block(1),
+            h2: block(2),
+            h3: block(3),
+          ),
+          contextMenuBuilder: (context, state) =>
+              AdaptiveTextSelectionToolbar.buttonItems(
+                anchors: state.contextMenuAnchors,
+                buttonItems: state.contextMenuButtonItems.map((item) {
+                  if (item.type != ContextMenuButtonType.paste) return item;
+                  return ContextMenuButtonItem(
+                    type: ContextMenuButtonType.paste,
+                    onPressed: () {
+                      state.hideToolbar();
+                      onPaste();
+                    },
+                  );
+                }).toList(),
+              ),
         ),
       ),
     );

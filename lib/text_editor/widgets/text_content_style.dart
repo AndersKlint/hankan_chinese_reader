@@ -44,8 +44,25 @@ StrutStyle? textEditorContentStrutStyle(
     return null;
   }
 
-  return StrutStyle.fromTextStyle(textStyle, forceStrutHeight: true);
+  return StrutStyle.fromTextStyle(textStyle, forceStrutHeight: false);
 }
+
+TextStyle textEditorParagraphStyle(
+  BuildContext context, {
+  required double fontSize,
+  int? heading,
+}) => textEditorContentTextStyle(context, fontSize: fontSize)!.copyWith(
+  fontSize:
+      fontSize *
+      (heading == 1
+          ? 2.0
+          : heading == 2
+          ? 1.6
+          : heading == 3
+          ? 1.3
+          : 1),
+  fontWeight: heading == null ? FontWeight.normal : FontWeight.bold,
+);
 
 /// Shared responsive surface wrapper used by both edit and read modes.
 ///

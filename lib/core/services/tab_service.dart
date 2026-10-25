@@ -25,6 +25,7 @@ class TabService {
     required DocumentType type,
     String? filePath,
     String? textContent,
+    bool textIsMarkdown = false,
   }) {
     final tab = TabModel(
       id: 'tab_${_nextId++}',
@@ -32,6 +33,7 @@ class TabService {
       type: type,
       filePath: filePath,
       textContent: textContent,
+      textIsMarkdown: textIsMarkdown,
     );
     tabs.value = [...tabs.value, tab];
     activeIndex.value = tabs.value.length - 1;

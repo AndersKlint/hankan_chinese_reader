@@ -27,6 +27,8 @@ class TabModel {
   /// For text documents, the current text content.
   String? textContent;
 
+  bool textIsMarkdown;
+
   /// For text documents, whether read mode is enabled.
   bool isReadMode;
 
@@ -68,6 +70,7 @@ class TabModel {
     this.filePath,
     this.isModified = false,
     this.textContent,
+    this.textIsMarkdown = false,
     this.isReadMode = false,
     this.showTextSearch = false,
     this.textSearchQuery = '',
