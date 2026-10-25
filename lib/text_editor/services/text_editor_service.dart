@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:flutter_quill/quill_delta.dart';
 import 'package:hankan_chinese_reader/core/services/file_service.dart';
 import 'package:hankan_chinese_reader/core/services/tab_service.dart';
 import 'package:hankan_chinese_reader/text_editor/services/document_codec.dart';
@@ -18,14 +19,16 @@ class TextEditorService {
   final DocumentCodec _codec = DocumentCodec();
   final Logger _logger = Logger('TextEditorService');
   StreamSubscription<DocChange>? _subscription;
-  String _savedContent = '';
+  Delta _savedDelta = Delta();
+  String? _serializedContent;
   String? _tabId;
   String? _filePath;
   bool _disposed = false;
 
   TextEditorService({this._fileService, this._tabService});
 
-  String get serializedContent => _codec.toMarkdown(controller.document);
+  String get serializedContent =>
+      _serializedContent ??= _codec.toMarkdown(controller.document);
   bool get canUndo => controller.hasUndo;
   bool get canRedo => controller.hasRedo;
   bool get isBold =>
@@ -55,31 +58,43 @@ class TextEditorService {
     _filePath = filePath;
     this.isReadMode.value = isReadMode;
     controller.readOnly = isReadMode;
-    _savedContent = serializedContent;
-    _subscription = controller.changes.listen((_) => _documentChanged());
-    _documentChanged(notifyTab: false);
+    _serializedContent = null;
+    _savedDelta = Delta.from(controller.document.toDelta());
+    isModified.value = false;
+    _updatePlainContent();
+    _subscription = controller.changes.listen(_documentChanged);
   }
 
-  void _documentChanged({bool notifyTab = true}) {
+  void _updatePlainContent() {
     final plainText = controller.document.toPlainText();
     content.value = plainText.substring(0, plainText.length - 1);
-    isModified.value = serializedContent != _savedContent;
-    revision.value++;
-    _syncTab(notify: notifyTab);
   }
 
-  void _syncTab({bool notify = true}) {
+  void _documentChanged(DocChange change) {
+    if (change.change.isEmpty) return;
+    _serializedContent = null;
+    if (change.change.toList().any((op) => op.isInsert || op.isDelete)) {
+      _updatePlainContent();
+    }
+    isModified.value = controller.document.toDelta() != _savedDelta;
+    revision.value++;
+    _syncTab();
+  }
+
+  void _syncTab({bool retainContent = false}) {
     final tabService = _tabService;
     final tabId = _tabId;
     if (tabService == null || tabId == null) return;
-    final tab = tabService.findTab(tabId);
-    tab.textContent = serializedContent;
-    tab.textIsMarkdown = true;
-    if (notify) {
-      tabService.setModified(tabId, modified: isModified.value);
-    } else {
-      tab.isModified = isModified.value;
+    final tab = tabService.tabs.value
+        .where((tab) => tab.id == tabId)
+        .firstOrNull;
+    if (tab == null) return;
+    if (retainContent) {
+      final hasFormatting = _codec.hasFormatting(controller.document);
+      tab.textContent = hasFormatting ? serializedContent : content.value;
+      tab.textIsMarkdown = hasFormatting;
     }
+    tabService.setModified(tabId, modified: isModified.value);
   }
 
   void toggleBold() => controller.formatSelection(
@@ -111,19 +126,17 @@ class TextEditorService {
   Future<bool> save() async {
     final fileService = _fileService;
     if (fileService == null) return false;
-    final snapshot = serializedContent;
     final document = controller.document;
-    final plainSnapshot = document.toPlainText();
+    final snapshot = Delta.from(document.toDelta());
     final path = _filePath;
     final isText = path?.toLowerCase().endsWith('.txt') ?? false;
     final asMarkdown = !isText || _codec.hasFormatting(document);
     final forceSaveAs = isText && asMarkdown;
+    final saveContent = asMarkdown ? serializedContent : content.value;
     final baseName = path?.split(RegExp(r'[/\\]')).last ?? 'document.md';
     try {
       final savedPath = await fileService.saveTextFile(
-        content: asMarkdown
-            ? snapshot
-            : plainSnapshot.substring(0, plainSnapshot.length - 1),
+        content: saveContent,
         existingPath: forceSaveAs ? null : path,
         fileName: forceSaveAs
             ? baseName.replaceFirst(
@@ -137,15 +150,17 @@ class TextEditorService {
         return false;
       }
       _filePath = savedPath;
-      _savedContent = snapshot;
-      isModified.value = serializedContent != snapshot;
+      _savedDelta = snapshot;
+      isModified.value = document.toDelta() != snapshot;
       final tabService = _tabService;
       final tabId = _tabId;
-      if (tabService != null && tabId != null) {
+      if (tabService != null &&
+          tabId != null &&
+          tabService.tabs.value.any((tab) => tab.id == tabId)) {
         tabService.findTab(tabId).filePath = savedPath;
         tabService.setTitle(tabId, savedPath.split(RegExp(r'[/\\]')).last);
       }
-      _syncTab();
+      _syncTab(retainContent: true);
       return true;
     } catch (error, stackTrace) {
       _logger.severe('Could not save document', error, stackTrace);
@@ -154,6 +169,7 @@ class TextEditorService {
   }
 
   void dispose() {
+    _syncTab(retainContent: true);
     _disposed = true;
     _subscription?.cancel();
     controller.dispose();

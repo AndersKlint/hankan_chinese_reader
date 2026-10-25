@@ -71,7 +71,9 @@ class TabService {
 
   /// Marks a tab as modified or unmodified and notifies listeners.
   void setModified(String tabId, {required bool modified}) {
-    findTab(tabId).isModified = modified;
+    final tab = findTab(tabId);
+    if (tab.isModified == modified) return;
+    tab.isModified = modified;
     // Trigger rebuild.
     tabs.value = [...tabs.value];
   }

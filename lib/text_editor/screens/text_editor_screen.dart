@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -39,6 +40,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
 
   bool _showSearch = false;
   String _searchQuery = '';
+  Timer? _searchDebounce;
   List<TextSearchResult> _matches = const <TextSearchResult>[];
   int _currentMatchIndex = -1;
   GlobalKey? _activeMatchKey;
@@ -92,6 +94,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     getIt<TextEditorServiceRegistry>().unregister(widget.tabId);
     _editorService.content.removeListener(_onContentChanged);
     _readScrollController.removeListener(_persistReadScrollOffset);
@@ -113,16 +116,32 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
   }
 
   void _onContentChanged() {
+    _searchDebounce?.cancel();
     if (_searchQuery.isNotEmpty) {
-      _recomputeSearchMatches(
-        _editorService.content.value,
-        _searchQuery,
-        reveal: false,
-      );
+      _searchDebounce = Timer(const Duration(milliseconds: 150), () {
+        _searchDebounce = null;
+        _recomputeSearchMatches(
+          _editorService.content.value,
+          _searchQuery,
+          reveal: false,
+        );
+      });
     }
   }
 
+  void _flushSearch() {
+    if (!(_searchDebounce?.isActive ?? false)) return;
+    _searchDebounce?.cancel();
+    _searchDebounce = null;
+    _recomputeSearchMatches(
+      _editorService.content.value,
+      _searchQuery,
+      reveal: false,
+    );
+  }
+
   void _setShowSearch(bool show) {
+    if (!show) _searchDebounce?.cancel();
     setState(() {
       _showSearch = show;
       if (!show) {
@@ -300,8 +319,10 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
 
   void _onSearchQueryChanged(String query) {
     if (_searchQuery == query) {
+      _flushSearch();
       return;
     }
+    _searchDebounce?.cancel();
     _searchQuery = query;
     _tab.textSearchQuery = query;
     _tabService.notifyTabStateChanged();
@@ -309,6 +330,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
   }
 
   void _nextMatch() {
+    _flushSearch();
     if (_matches.isEmpty) {
       return;
     }
@@ -319,6 +341,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
   }
 
   void _previousMatch() {
+    _flushSearch();
     if (_matches.isEmpty) {
       return;
     }
@@ -411,7 +434,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
     if (!_editorService.isReadMode.value) action();
   }
 
-  Map<ShortcutActivator, VoidCallback> get _richShortcuts => {
+  late final Map<ShortcutActivator, VoidCallback> _richShortcuts = {
     for (final meta in [false, true]) ...{
       SingleActivator(
         LogicalKeyboardKey.keyB,
@@ -479,11 +502,22 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
     },
   };
 
+  late final Map<ShortcutActivator, Intent> _editorShortcuts = {
+    for (final entry in _richShortcuts.entries)
+      entry.key: _EditorCommand(entry.value),
+  };
+  late final Map<Type, Action<Intent>> _editorActions = {
+    _EditorCommand: CallbackAction<_EditorCommand>(
+      onInvoke: (intent) {
+        intent.callback();
+        return null;
+      },
+    ),
+  };
+
   @override
   Widget build(BuildContext context) {
     final isReadMode = watch(_editorService.isReadMode).value;
-    final content = watch(_editorService.content).value;
-    watch(_editorService.revision);
 
     return CallbackShortcuts(
       bindings: {
@@ -550,15 +584,21 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
                 onPointerSignal: _onPointerSignal,
                 onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
                 child: isReadMode
-                    ? TextReadView(
-                        text: content,
-                        document: _editorService.controller.document,
-                        matches: _matches,
-                        activeMatchIndex: _currentMatchIndex,
-                        scrollController: _readScrollController,
-                        scrollPhysics: _contentScrollPhysics,
-                        revealToken: _activeMatchKey,
-                        fontSize: _fontSize,
+                    ? ListenableBuilder(
+                        listenable: Listenable.merge([
+                          _editorService.content,
+                          _editorService.revision,
+                        ]),
+                        builder: (context, _) => TextReadView(
+                          text: _editorService.content.value,
+                          document: _editorService.controller.document,
+                          matches: _matches,
+                          activeMatchIndex: _currentMatchIndex,
+                          scrollController: _readScrollController,
+                          scrollPhysics: _contentScrollPhysics,
+                          revealToken: _activeMatchKey,
+                          fontSize: _fontSize,
+                        ),
                       )
                     : TextEditView(
                         controller: _editorService.controller,
@@ -567,18 +607,8 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
                         focusNode: _editFocusNode,
                         fontSize: _fontSize,
                         onPaste: _paste,
-                        shortcuts: {
-                          for (final entry in _richShortcuts.entries)
-                            entry.key: _EditorCommand(entry.value),
-                        },
-                        actions: {
-                          _EditorCommand: CallbackAction<_EditorCommand>(
-                            onInvoke: (intent) {
-                              intent.callback();
-                              return null;
-                            },
-                          ),
-                        },
+                        shortcuts: _editorShortcuts,
+                        actions: _editorActions,
                       ),
               ),
             ),
@@ -589,6 +619,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
   }
 
   void _toggleMode() {
+    _flushSearch();
     final nextIsReadMode = !_editorService.isReadMode.value;
     final scrollOffset = _currentScrollOffset(
       isReadMode: _editorService.isReadMode.value,
@@ -605,6 +636,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
   void didUpdateWidget(covariant TextEditorScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.tabId != widget.tabId) {
+      _searchDebounce?.cancel();
       final tab = _tab;
       _showSearch = tab.showTextSearch;
       _searchQuery = tab.textSearchQuery;

@@ -120,8 +120,9 @@ class DocumentCodec {
 
   String _escape(String text) => text.runes.map((rune) {
     if (rune <= 0x7f &&
-        (rune <= 0x20 ||
-            !RegExp(r'[a-zA-Z0-9]').hasMatch(String.fromCharCode(rune)))) {
+        !((rune >= 0x30 && rune <= 0x39) ||
+            (rune >= 0x41 && rune <= 0x5a) ||
+            (rune >= 0x61 && rune <= 0x7a))) {
       return '&#$rune;';
     }
     return String.fromCharCode(rune);
