@@ -14,7 +14,13 @@ void main() async {
 
   Logger.root.level = Level.INFO;
   Logger.root.onRecord.listen((record) {
-    debugPrint('${record.level.name}: ${record.loggerName}: ${record.message}');
+    final error = record.error;
+    debugPrint(
+      '${record.level.name}: ${record.loggerName}: ${record.message}'
+      '${error == null ? '' : ': $error'}',
+    );
+    final stackTrace = record.stackTrace;
+    if (stackTrace != null) debugPrint(stackTrace.toString());
   });
 
   await setupServiceLocator();

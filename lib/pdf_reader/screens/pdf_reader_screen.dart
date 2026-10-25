@@ -1,10 +1,21 @@
 import 'dart:async';
+import 'dart:ui' as ui;
+
+import 'package:logging/logging.dart';
+import 'package:hankan_chinese_reader/core/services/file_service.dart';
+import 'package:hankan_chinese_reader/pdf_reader/services/pdf_annotation_service.dart';
+import 'package:hankan_chinese_reader/pdf_reader/services/pdf_annotation_service_registry.dart';
+import 'package:hankan_chinese_reader/pdf_reader/services/pdf_highlight_color_service.dart';
+import 'package:hankan_chinese_reader/pdf_reader/widgets/pdf_highlight_palette.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
+
 import 'dart:math' as math;
+
 import 'package:chinese_popup_dict/chinese_popup_dict.dart';
 import 'package:hankan_chinese_reader/core/services/document_history_service.dart';
 import 'package:pdfrx/pdfrx.dart';
@@ -34,6 +45,27 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   late final TabService _tabService;
   late final DocumentHistoryService _documentHistoryService;
   late final PdfOcrService _pdfOcrService;
+  late final PdfAnnotationService _annotations;
+  late final PdfHighlightColorService _colors;
+  Uint8List? _pdfBytes;
+  Object? _loadError;
+  bool _hasSelection = false;
+  bool _paletteOpen = false;
+  bool _operationPending = false;
+  ui.Image? _retainedViewport;
+  bool _showRetainedViewport = false;
+  Timer? _retainedViewportTimer;
+  List<double>? _retainedViewportTransform;
+  Future<void>? _annotationRefresh;
+  late String _sourceName;
+  int _loadAttempt = 0;
+  final _logger = Logger('PdfReaderScreen');
+
+  bool get _canEdit =>
+      !kIsWeb &&
+      _annotations.isSupported &&
+      !_annotations.isBusy &&
+      !_operationPending;
 
   String? _filePath;
   String _title = '';
@@ -74,7 +106,6 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
       },
     );
 
-    super.initState();
     _tabService = getIt<TabService>();
     _documentHistoryService = getIt<DocumentHistoryService>();
     _pdfOcrService = getIt<PdfOcrService>();
@@ -86,12 +117,25 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
     _showSearchBar = tab.showPdfSearch;
     _ocrEnabled = tab.pdfOcrEnabled;
     _searchController.text = tab.pdfSearchQuery;
+    _sourceName = _filePath ?? widget.tabId;
+    _annotations = getIt<PdfAnnotationService>()..initialize(widget.tabId);
+    _colors = getIt<PdfHighlightColorService>();
+    getIt<PdfAnnotationServiceRegistry>().register(widget.tabId, _annotations);
+    _annotations.addListener(_onAnnotationsChanged);
+    _colors.addListener(_onColorsChanged);
+    unawaited(_loadPdf());
 
     _pdfController.addListener(_onPdfStateChanged);
   }
 
   @override
   void dispose() {
+    _retainedViewportTimer?.cancel();
+    _retainedViewport?.dispose();
+    _annotations.removeListener(_onAnnotationsChanged);
+    _colors.removeListener(_onColorsChanged);
+    getIt<PdfAnnotationServiceRegistry>().unregister(widget.tabId);
+    _annotations.dispose();
     _autoScrollController.dispose();
     _saveViewStateDebounce?.cancel();
     _restoreLockTimer?.cancel();
@@ -105,7 +149,154 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
     super.dispose();
   }
 
+  void _onColorsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  int _annotationContentRevision = 0;
+
+  void _onAnnotationsChanged() {
+    if (!mounted) return;
+    if (_annotationContentRevision != _annotations.contentRevision) {
+      _annotationContentRevision = _annotations.contentRevision;
+      if (_pdfController.isReady) {
+        // pdfrx retains same-geometry bitmaps even after annotation edits reload the page.
+        _annotationRefresh = _refreshAnnotationImages();
+      }
+    }
+    setState(() {
+      _filePath = _annotations.filePath;
+      _title = _tabService.findTab(widget.tabId).title;
+    });
+    _schedulePdfViewStateSave();
+  }
+
+  Future<void> _refreshAnnotationImages() async {
+    try {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || !_pdfController.isReady) return;
+      final boundary = _pdfViewerKey.currentContext?.findRenderObject();
+      if (boundary is RenderRepaintBoundary) {
+        final image = await boundary.toImage(
+          pixelRatio: MediaQuery.devicePixelRatioOf(context),
+        );
+        if (!mounted) {
+          image.dispose();
+          return;
+        }
+        _retainedViewport?.dispose();
+        setState(() {
+          _retainedViewport = image;
+          _retainedViewportTransform = _pdfController.value.storage.toList();
+          _showRetainedViewport = true;
+        });
+      }
+    } catch (error, stack) {
+      _logger.warning('Could not retain PDF viewport', error, stack);
+    }
+    if (!mounted || !_pdfController.isReady) return;
+    _pdfController.releaseCachedImages(keepVisible: false);
+    _retainedViewportTimer?.cancel();
+    _retainedViewportTimer = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) setState(() => _showRetainedViewport = false);
+    });
+  }
+
+  void _showFailure(String message, Object error, StackTrace stack) {
+    _logger.warning(message, error, stack);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('$message: $error')));
+  }
+
+  Future<void> _loadPdf() async {
+    if (_filePath == null) return;
+    setState(() {
+      _loadError = null;
+      _pdfBytes = null;
+      _loadAttempt++;
+      _canPersistPdfViewState = false;
+    });
+    try {
+      final bytes = await getIt<FileService>().readPdfFile(_filePath!);
+      if (mounted) setState(() => _pdfBytes = bytes);
+    } catch (error, stack) {
+      if (mounted) setState(() => _loadError = error);
+      _showFailure('Could not load PDF', error, stack);
+    }
+  }
+
+  Future<void> _runEdit(Future<void> Function() action) async {
+    if (!_canEdit) return;
+    final matrix = _pdfController.value.clone();
+    setState(() => _operationPending = true);
+    try {
+      await action();
+    } catch (error, stack) {
+      _showFailure('PDF operation failed', error, stack);
+    } finally {
+      await _annotationRefresh;
+      if (mounted) {
+        if (_pdfController.isReady) _pdfController.value = matrix;
+        setState(() => _operationPending = false);
+      }
+    }
+  }
+
+  Future<void> _save({bool saveAs = false}) => _runEdit(() async {
+    final saved = await _annotations.save(saveAs: saveAs);
+    if (!saved || !mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('PDF saved')));
+  });
+
+  Future<void> _highlightSelection() => _runEdit(() async {
+    final selection = _pdfController.textSelectionDelegate;
+    final ranges = await selection.getSelectedTextRanges();
+    await _annotations.applyHighlightColor(ranges, _colors.selectedColor);
+    await selection.clearTextSelection();
+  });
+
+  Future<void> _chooseColor() async {
+    if (!_canEdit || _paletteOpen) return;
+    _paletteOpen = true;
+    ChinesePopupDict.hideActivePopup();
+    try {
+      final result = await showDialog<PdfHighlightPaletteResult>(
+        context: context,
+        builder: (_) => PdfHighlightPalette(
+          colors: _colors,
+          initialColor: _colors.selectedColor,
+        ),
+      );
+      if (!mounted || result == null || !_canEdit) return;
+      await _colors.selectColor(result.color);
+    } catch (error, stack) {
+      _showFailure('Could not update highlight color', error, stack);
+    } finally {
+      _paletteOpen = false;
+    }
+  }
+
+  Future<void> _attachAnnotations(PdfDocument document) async {
+    try {
+      await _annotations.attachDocument(document, _pdfController.documentRef);
+    } catch (error, stack) {
+      _showFailure('Could not load PDF highlights', error, stack);
+    }
+  }
+
   void _onPdfStateChanged() {
+    if (_retainedViewport != null &&
+        !listEquals(_retainedViewportTransform, _pdfController.value.storage)) {
+      _retainedViewportTimer?.cancel();
+      final image = _retainedViewport;
+      setState(() {
+        _showRetainedViewport = false;
+        _retainedViewport = null;
+      });
+      image?.dispose();
+    }
     if (_restoreLockCenter != null && _canPersistPdfViewState) {
       final center = _pdfController.centerPosition;
       if ((center - _restoreLockCenter!).distance > _restoreLockZoom * 300) {
@@ -510,9 +701,39 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
     if (_filePath == null) {
       return const Center(child: Text('No PDF file specified.'));
     }
+    if (_pdfBytes == null) {
+      return Center(
+        child: _loadError == null
+            ? const CircularProgressIndicator()
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Could not load PDF: $_loadError',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  TextButton(onPressed: _loadPdf, child: const Text('Retry')),
+                ],
+              ),
+      );
+    }
 
     return CallbackShortcuts(
       bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyS, control: true): _save,
+        const SingleActivator(LogicalKeyboardKey.keyS, meta: true): _save,
+        const SingleActivator(
+          LogicalKeyboardKey.keyS,
+          control: true,
+          shift: true,
+        ): () =>
+            _save(saveAs: true),
+        const SingleActivator(
+          LogicalKeyboardKey.keyS,
+          meta: true,
+          shift: true,
+        ): () =>
+            _save(saveAs: true),
         const SingleActivator(LogicalKeyboardKey.keyF, control: true):
             _activateSearch,
         const SingleActivator(LogicalKeyboardKey.numpadAdd, control: true):
@@ -540,6 +761,13 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
               Column(
                 children: [
                   PdfToolbar(
+                    canEdit: _canEdit,
+                    hasSelection: _hasSelection,
+                    highlightColor: _colors.selectedColor,
+                    onHighlight: _highlightSelection,
+                    onChooseColor: _chooseColor,
+                    onSave: _save,
+                    onSaveAs: () => _save(saveAs: true),
                     showThumbnails: _showThumbnails,
                     onToggleThumbnails: () {
                       setState(() => _showThumbnails = !_showThumbnails);
@@ -574,9 +802,9 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                   Expanded(
                     child: Row(
                       children: [
-                        if (_showThumbnails)
+                        if (_showThumbnails && _pdfController.isReady)
                           PdfThumbnailSidebar(
-                            filePath: _filePath!,
+                            documentRef: _pdfController.documentRef,
                             currentPage: _currentPage,
                             onPageTapped: _jumpToPage,
                             width: MediaQuery.of(context).size.width < 600
@@ -596,146 +824,266 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                                 _autoScrollController.handlePointerUp(),
                             onPointerCancel:
                                 _autoScrollController.handlePointerCancel,
-                            child: RepaintBoundary(
-                              key: _pdfViewerKey,
-                              child: PdfViewer.file(
-                                _filePath!,
-                                controller: _pdfController,
-                                params: PdfViewerParams(
-                                  scrollByMouseWheel: 0.1,
-                                  maxImageBytesCachedOnMemory: 50 * 1024 * 1024,
-                                  horizontalCacheExtent: 0.5,
-                                  verticalCacheExtent: 0.5,
-                                  onViewerReady: (document, controller) {
-                                    setState(() {
-                                      _textSearcher = PdfTextSearcher(
-                                        _pdfController,
-                                      );
-                                    });
-
-                                    final tab = _tabService.findTab(
-                                      widget.tabId,
-                                    );
-                                    unawaited(() async {
-                                      final savedState = _filePath == null
-                                          ? null
-                                          : _documentHistoryService
-                                                .getPdfViewState(_filePath!);
-                                      await _restoreSavedPdfView(document);
-
-                                      final targetPage = tab.pdfCurrentPage
-                                          .clamp(1, document.pages.length);
-                                      if (_pdfController.pageNumber == 1 &&
-                                          targetPage != 1 &&
-                                          savedState == null) {
-                                        await _pdfController.goToPage(
-                                          pageNumber: targetPage,
-                                          duration: Duration.zero,
-                                        );
-                                      }
-                                      if (_showSearchBar &&
-                                          tab.pdfSearchQuery.isNotEmpty) {
-                                        _textSearcher?.startTextSearch(
-                                          tab.pdfSearchQuery,
-                                        );
-                                        _activateSearch();
-                                      }
-                                    }());
-                                  },
-                                  onPageChanged: (pageNumber) {
-                                    if (pageNumber != null &&
-                                        pageNumber != _currentPage) {
-                                      setState(() => _currentPage = pageNumber);
-                                      _tabService
-                                              .findTab(widget.tabId)
-                                              .pdfCurrentPage =
-                                          pageNumber;
-                                    }
-                                  },
-                                  textSelectionParams:
-                                      const PdfTextSelectionParams(
-                                        enabled: true,
-                                      ),
-                                  onGeneralTap: (context, controller, details) {
-                                    if (details.type !=
-                                        PdfViewerGeneralTapType.tap) {
-                                      return false;
-                                    }
-                                    if (!_isOcrEnabled) {
-                                      return false;
-                                    }
-                                    if (details.tapOn ==
-                                        PdfViewerPart.selectedText) {
-                                      return false;
-                                    }
-
-                                    final hit = _pdfController
-                                        .getPdfPageHitTestResult(
-                                          details.documentPosition,
-                                          useDocumentLayoutCoordinates: true,
-                                        );
-                                    if (hit == null) {
-                                      return false;
-                                    }
-
-                                    _handlePdfTap(context, hit);
-                                    return true;
-                                  },
-                                  pageOverlaysBuilder:
-                                      (context, pageRect, page) {
-                                        return [
-                                          PdfTextOverlay(
-                                            page: page,
-                                            pageRect: pageRect,
-                                            enabled: !_isOcrEnabled,
-                                            onTextLayerDetected:
-                                                (hasTextLayer) {
-                                                  _onPageTextLayerDetected(
-                                                    page.pageNumber,
-                                                    hasTextLayer,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                RepaintBoundary(
+                                  key: _pdfViewerKey,
+                                  child: PdfViewer.data(
+                                    _pdfBytes!,
+                                    sourceName:
+                                        '${widget.tabId}:$_sourceName#$_loadAttempt',
+                                    controller: _pdfController,
+                                    params: PdfViewerParams(
+                                      errorBannerBuilder:
+                                          (
+                                            context,
+                                            error,
+                                            stack,
+                                            documentRef,
+                                          ) => Center(
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  'Could not open PDF: $error',
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodyMedium,
+                                                ),
+                                                TextButton(
+                                                  onPressed: _loadPdf,
+                                                  child: const Text('Retry'),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                      onDocumentLoadFinished:
+                                          (documentRef, succeeded) {
+                                            if (succeeded) return;
+                                            final state = documentRef
+                                                .resolveListenable();
+                                            WidgetsBinding.instance
+                                                .addPostFrameCallback((_) {
+                                                  _showFailure(
+                                                    'Could not open PDF',
+                                                    state.error ??
+                                                        StateError(
+                                                          'PDF loading failed',
+                                                        ),
+                                                    state.stackTrace ??
+                                                        StackTrace.current,
+                                                  );
+                                                });
+                                          },
+                                      customizeContextMenuItems:
+                                          (params, items) {
+                                            if (!_canEdit ||
+                                                !params
+                                                    .textSelectionDelegate
+                                                    .hasSelectedText) {
+                                              return;
+                                            }
+                                            items.add(
+                                              ContextMenuButtonItem(
+                                                label: 'Highlight',
+                                                onPressed: () {
+                                                  params.dismissContextMenu();
+                                                  unawaited(
+                                                    _highlightSelection(),
                                                   );
                                                 },
-                                          ),
-                                        ];
+                                              ),
+                                            );
+                                            items.add(
+                                              ContextMenuButtonItem(
+                                                label: 'Highlight color…',
+                                                onPressed: () {
+                                                  params.dismissContextMenu();
+                                                  unawaited(_chooseColor());
+                                                },
+                                              ),
+                                            );
+                                          },
+                                      scrollByMouseWheel: 0.1,
+                                      maxImageBytesCachedOnMemory:
+                                          50 * 1024 * 1024,
+                                      horizontalCacheExtent: 0.5,
+                                      verticalCacheExtent: 0.5,
+                                      onViewerReady: (document, controller) {
+                                        unawaited(_attachAnnotations(document));
+                                        _textSearcher?.dispose();
+                                        setState(() {
+                                          _textSearcher = PdfTextSearcher(
+                                            _pdfController,
+                                          );
+                                        });
+
+                                        final tab = _tabService.findTab(
+                                          widget.tabId,
+                                        );
+                                        unawaited(() async {
+                                          final savedState = _filePath == null
+                                              ? null
+                                              : _documentHistoryService
+                                                    .getPdfViewState(
+                                                      _filePath!,
+                                                    );
+                                          await _restoreSavedPdfView(document);
+
+                                          final targetPage = tab.pdfCurrentPage
+                                              .clamp(1, document.pages.length);
+                                          if (_pdfController.pageNumber == 1 &&
+                                              targetPage != 1 &&
+                                              savedState == null) {
+                                            await _pdfController.goToPage(
+                                              pageNumber: targetPage,
+                                              duration: Duration.zero,
+                                            );
+                                          }
+                                          if (_showSearchBar &&
+                                              tab.pdfSearchQuery.isNotEmpty) {
+                                            _textSearcher?.startTextSearch(
+                                              tab.pdfSearchQuery,
+                                            );
+                                            _activateSearch();
+                                          }
+                                        }());
                                       },
-                                  viewerOverlayBuilder:
-                                      (context, size, handleLinkTap) => [
-                                        PdfViewerScrollThumb(
-                                          controller: _pdfController,
-                                          orientation:
-                                              ScrollbarOrientation.right,
-                                          margin: 6,
-                                          thumbSize: const Size(10, 64),
-                                          thumbBuilder:
-                                              (
-                                                context,
-                                                thumbSize,
-                                                pageNumber,
-                                                controller,
-                                              ) {
-                                                return DecoratedBox(
-                                                  decoration: BoxDecoration(
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .primary
-                                                        .withValues(
-                                                          alpha: 0.75,
-                                                        ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          thumbSize.width / 2,
-                                                        ),
-                                                  ),
+                                      onPageChanged: (pageNumber) {
+                                        if (pageNumber != null &&
+                                            pageNumber != _currentPage) {
+                                          setState(
+                                            () => _currentPage = pageNumber,
+                                          );
+                                          _tabService
+                                                  .findTab(widget.tabId)
+                                                  .pdfCurrentPage =
+                                              pageNumber;
+                                        }
+                                      },
+                                      textSelectionParams:
+                                          PdfTextSelectionParams(
+                                            enabled: true,
+                                            onTextSelectionChange: (selection) {
+                                              if (mounted) {
+                                                setState(
+                                                  () => _hasSelection =
+                                                      selection.hasSelectedText,
                                                 );
-                                              },
-                                        ),
+                                              }
+                                            },
+                                          ),
+                                      onGeneralTap:
+                                          (context, controller, details) {
+                                            if (details.type !=
+                                                PdfViewerGeneralTapType.tap) {
+                                              return false;
+                                            }
+                                            if (details.tapOn ==
+                                                PdfViewerPart.selectedText) {
+                                              return false;
+                                            }
+
+                                            final hit = _pdfController
+                                                .getPdfPageHitTestResult(
+                                                  details.documentPosition,
+                                                  useDocumentLayoutCoordinates:
+                                                      true,
+                                                );
+                                            if (hit == null) {
+                                              return false;
+                                            }
+
+                                            if (!_isOcrEnabled) return false;
+
+                                            _handlePdfTap(context, hit);
+                                            return true;
+                                          },
+                                      pageOverlaysBuilder:
+                                          (context, pageRect, page) {
+                                            return [
+                                              PdfTextOverlay(
+                                                page: page,
+                                                pageRect: pageRect,
+                                                enabled: !_isOcrEnabled,
+                                                onTextLayerDetected:
+                                                    (hasTextLayer) {
+                                                      _onPageTextLayerDetected(
+                                                        page.pageNumber,
+                                                        hasTextLayer,
+                                                      );
+                                                    },
+                                              ),
+                                            ];
+                                          },
+                                      viewerOverlayBuilder:
+                                          (context, size, handleLinkTap) => [
+                                            PdfViewerScrollThumb(
+                                              controller: _pdfController,
+                                              orientation:
+                                                  ScrollbarOrientation.right,
+                                              margin: 6,
+                                              thumbSize: const Size(10, 64),
+                                              thumbBuilder:
+                                                  (
+                                                    context,
+                                                    thumbSize,
+                                                    pageNumber,
+                                                    controller,
+                                                  ) {
+                                                    return DecoratedBox(
+                                                      decoration: BoxDecoration(
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .primary
+                                                            .withValues(
+                                                              alpha: 0.75,
+                                                            ),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              thumbSize.width /
+                                                                  2,
+                                                            ),
+                                                      ),
+                                                    );
+                                                  },
+                                            ),
+                                          ],
+                                      pagePaintCallbacks: [
+                                        if (_textSearcher != null)
+                                          _textSearcher!
+                                              .pageTextMatchPaintCallback,
                                       ],
-                                  pagePaintCallbacks: [
-                                    if (_textSearcher != null)
-                                      _textSearcher!.pageTextMatchPaintCallback,
-                                  ],
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                if (_retainedViewport != null)
+                                  Positioned.fill(
+                                    child: IgnorePointer(
+                                      child: AnimatedOpacity(
+                                        opacity: _showRetainedViewport ? 1 : 0,
+                                        duration: const Duration(
+                                          milliseconds: 180,
+                                        ),
+                                        onEnd: () {
+                                          if (!_showRetainedViewport &&
+                                              mounted) {
+                                            final image = _retainedViewport;
+                                            setState(
+                                              () => _retainedViewport = null,
+                                            );
+                                            image?.dispose();
+                                          }
+                                        },
+                                        child: RawImage(
+                                          image: _retainedViewport,
+                                          fit: BoxFit.fill,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                         ),

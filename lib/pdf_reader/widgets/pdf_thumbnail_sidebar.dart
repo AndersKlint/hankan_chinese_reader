@@ -3,8 +3,7 @@ import 'package:pdfrx/pdfrx.dart';
 
 /// Left sidebar showing page thumbnails for quick navigation.
 class PdfThumbnailSidebar extends StatefulWidget {
-  /// Path to the PDF file.
-  final String filePath;
+  final PdfDocumentRef documentRef;
 
   /// Currently visible page number (1-indexed).
   final int currentPage;
@@ -17,7 +16,7 @@ class PdfThumbnailSidebar extends StatefulWidget {
 
   const PdfThumbnailSidebar({
     super.key,
-    required this.filePath,
+    required this.documentRef,
     required this.currentPage,
     required this.onPageTapped,
     this.width = 160,
@@ -120,8 +119,8 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
           right: BorderSide(color: colorScheme.outlineVariant, width: 0.5),
         ),
       ),
-      child: PdfDocumentViewBuilder.file(
-        widget.filePath,
+      child: PdfDocumentViewBuilder(
+        documentRef: widget.documentRef,
         builder: (context, document) {
           if (document == null) {
             return const Center(

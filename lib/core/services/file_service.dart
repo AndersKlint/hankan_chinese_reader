@@ -6,8 +6,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:file_selector/file_selector.dart' as file_selector;
 import 'package:flutter/foundation.dart' show kIsWeb;
 
+import '../../pdf_reader/repositories/pdf_annotation_repository.dart';
+
 /// Handles file picking, reading, and saving across platforms.
 class FileService {
+  Future<Uint8List> readPdfFile(String path) =>
+      PdfAnnotationRepository().read(path);
+
   /// Shows an open-file dialog filtered to [extensions].
   /// Returns the picked file result, or `null` if cancelled.
   Future<PlatformFile?> pickFile({

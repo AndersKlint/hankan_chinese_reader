@@ -17,6 +17,13 @@ class PdfToolbar extends StatelessWidget {
   final bool canToggleOcr;
   final ValueChanged<bool> onOcrChanged;
   final bool showOcrProgress;
+  final bool canEdit;
+  final bool hasSelection;
+  final Color? highlightColor;
+  final VoidCallback onHighlight;
+  final VoidCallback onChooseColor;
+  final VoidCallback onSave;
+  final VoidCallback onSaveAs;
 
   const PdfToolbar({
     super.key,
@@ -34,6 +41,13 @@ class PdfToolbar extends StatelessWidget {
     required this.canToggleOcr,
     required this.onOcrChanged,
     this.showOcrProgress = false,
+    required this.canEdit,
+    required this.hasSelection,
+    required this.highlightColor,
+    required this.onHighlight,
+    required this.onChooseColor,
+    required this.onSave,
+    required this.onSaveAs,
   });
 
   @override
@@ -48,13 +62,15 @@ class PdfToolbar extends StatelessWidget {
           bottom: BorderSide(color: colorScheme.outlineVariant, width: 0.5),
         ),
       ),
-      child: LayoutBuilder(builder: (context, constraints) {
-        const double minDesktopWidth = 380;
-        if (constraints.maxWidth >= minDesktopWidth) {
-          return _buildDesktopToolbar(context);
-        }
-        return _buildMobileToolbar(context);
-      }),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          const double minDesktopWidth = 720;
+          if (constraints.maxWidth >= minDesktopWidth) {
+            return _buildDesktopToolbar(context);
+          }
+          return _buildMobileToolbar(context);
+        },
+      ),
     );
   }
 
@@ -119,6 +135,28 @@ class PdfToolbar extends StatelessWidget {
 
         const Spacer(),
 
+        IconButton(
+          tooltip: highlightColor == null
+              ? 'Clear selected highlighting'
+              : 'Highlight selected text',
+          icon: Icon(
+            highlightColor == null ? Icons.format_color_reset : Icons.highlight,
+            color: canEdit ? highlightColor : null,
+          ),
+          onPressed: canEdit && hasSelection ? onHighlight : null,
+        ),
+        IconButton(
+          tooltip: 'Highlight color',
+          icon: const Icon(Icons.palette_outlined, size: 18),
+          onPressed: canEdit ? onChooseColor : null,
+        ),
+        IconButton(
+          tooltip: 'Save (Ctrl/Cmd+S)',
+          icon: const Icon(Icons.save_outlined, size: 18),
+          onPressed: canEdit ? onSave : null,
+        ),
+        _overflowMenu(),
+
         _PageInput(
           currentPage: currentPage,
           pageCount: pageCount,
@@ -131,81 +169,70 @@ class PdfToolbar extends StatelessWidget {
   }
 
   Widget _buildMobileToolbar(BuildContext context) {
-    return _buildMobileNormalBar(context);
-  }
-
-  Widget _buildMobileNormalBar(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final inactiveOcrColor = colorScheme.onSurfaceVariant;
-    final activeOcrColor = colorScheme.onSurface;
-
     return Row(
       children: [
         IconButton(
-          icon: Icon(
-            showThumbnails ? Icons.view_sidebar : Icons.view_sidebar_outlined,
-            size: 18,
-          ),
-          tooltip: 'Toggle page thumbnails',
-          onPressed: onToggleThumbnails,
-          visualDensity: VisualDensity.compact,
-        ),
-
-        const VerticalDivider(width: 1, indent: 8, endIndent: 8),
-
-        IconButton(
-          icon: const Icon(Icons.search, size: 18),
           tooltip: 'Search in document',
+          icon: const Icon(Icons.search, size: 18),
           onPressed: textSearcher != null ? onActivateSearch : null,
-          visualDensity: VisualDensity.compact,
-        ),
-
-        const VerticalDivider(width: 1, indent: 8, endIndent: 8),
-
-        IconButton(
-          icon: const Icon(Icons.remove, size: 18),
-          tooltip: 'Zoom out',
-          onPressed: canZoom ? onZoomOut : null,
-          visualDensity: VisualDensity.compact,
         ),
         IconButton(
-          icon: const Icon(Icons.add, size: 18),
-          tooltip: 'Zoom in',
-          onPressed: canZoom ? onZoomIn : null,
-          visualDensity: VisualDensity.compact,
-        ),
-
-        const VerticalDivider(width: 1, indent: 8, endIndent: 8),
-
-        Tooltip(
-          message: 'Toggle OCR dictionary lookup',
-          child: TextButton(
-            onPressed: canToggleOcr ? () => onOcrChanged(!ocrEnabled) : null,
-            style: TextButton.styleFrom(
-              foregroundColor: ocrEnabled ? activeOcrColor : inactiveOcrColor,
-              textStyle: Theme.of(context).textTheme.labelMedium?.copyWith(
-                fontWeight: ocrEnabled ? FontWeight.w600 : FontWeight.w400,
-              ),
-              minimumSize: const Size(48, 30),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-            ),
-            child: const Text('OCR'),
+          tooltip: highlightColor == null
+              ? 'Clear selected highlighting'
+              : 'Highlight selected text',
+          icon: Icon(
+            highlightColor == null ? Icons.format_color_reset : Icons.highlight,
+            color: canEdit ? highlightColor : null,
           ),
+          onPressed: canEdit && hasSelection ? onHighlight : null,
         ),
-
         const Spacer(),
-
         _PageInput(
           currentPage: currentPage,
           pageCount: pageCount,
           onPageSubmitted: onPageSubmitted,
         ),
-
-        const SizedBox(width: 6),
+        _overflowMenu(),
       ],
     );
   }
 
+  Widget _overflowMenu() => PopupMenuButton<VoidCallback>(
+    tooltip: 'PDF actions',
+    onSelected: (action) => action(),
+    itemBuilder: (context) => [
+      PopupMenuItem(value: onSave, enabled: canEdit, child: const Text('Save')),
+      PopupMenuItem(
+        value: onSaveAs,
+        enabled: canEdit,
+        child: const Text('Save As…'),
+      ),
+      PopupMenuItem(
+        value: onChooseColor,
+        enabled: canEdit,
+        child: const Text('Highlight color…'),
+      ),
+      PopupMenuItem(
+        value: onToggleThumbnails,
+        child: const Text('Toggle thumbnails'),
+      ),
+      PopupMenuItem(
+        value: onZoomIn,
+        enabled: canZoom,
+        child: const Text('Zoom in'),
+      ),
+      PopupMenuItem(
+        value: onZoomOut,
+        enabled: canZoom,
+        child: const Text('Zoom out'),
+      ),
+      PopupMenuItem(
+        value: () => onOcrChanged(!ocrEnabled),
+        enabled: canToggleOcr,
+        child: Text(ocrEnabled ? 'Disable OCR' : 'Enable OCR'),
+      ),
+    ],
+  );
 }
 
 /// Editable page number input with total page count.
@@ -267,9 +294,8 @@ class _PageInputState extends State<_PageInput> {
 
   @override
   Widget build(BuildContext context) {
-    final textStyle = Theme.of(
-      context,
-    ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600);
+    final textStyle = Theme.of(context).textTheme.bodySmall
+        ?.copyWith(fontWeight: FontWeight.w600);
 
     if (_isEditing) {
       return Row(

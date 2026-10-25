@@ -216,8 +216,7 @@ class _PdfTextOverlayState extends State<PdfTextOverlay> {
         child: Padding(
           padding: const EdgeInsets.all(8.0),
           child: Tooltip(
-            message:
-                'No text layer found on this page. Dictionary lookup unavailable.',
+            message: 'No text layer found on this page. Dictionary lookup unavailable.',
             child: Icon(
               Icons.warning_amber_rounded,
               size: 16,

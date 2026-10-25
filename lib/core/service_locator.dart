@@ -9,6 +9,11 @@ import 'package:hankan_chinese_reader/text_editor/services/text_editor_service.d
 import 'package:hankan_chinese_reader/text_editor/services/text_editor_service_registry.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../pdf_reader/repositories/pdf_annotation_repository.dart';
+import '../pdf_reader/services/pdf_annotation_service.dart';
+import '../pdf_reader/services/pdf_annotation_service_registry.dart';
+import '../pdf_reader/services/pdf_highlight_color_service.dart';
+
 final getIt = GetIt.instance;
 
 /// Registers all application services and initializes the popup dictionary.
@@ -22,6 +27,22 @@ Future<void> setupServiceLocator() async {
   getIt.registerLazySingleton<ThemeService>(() => ThemeService());
   getIt.registerLazySingleton<PdfOcrService>(() => PdfOcrService());
   getIt.registerSingleton<DocumentHistoryService>(documentHistoryService);
+  getIt.registerLazySingleton<PdfAnnotationRepository>(
+    () => PdfAnnotationRepository(),
+  );
+  getIt.registerLazySingleton<PdfAnnotationServiceRegistry>(
+    () => PdfAnnotationServiceRegistry(),
+  );
+  getIt.registerSingleton<PdfHighlightColorService>(
+    PdfHighlightColorService(sharedPreferences),
+  );
+  getIt.registerFactory<PdfAnnotationService>(
+    () => PdfAnnotationService(
+      getIt<PdfAnnotationRepository>(),
+      tabService: getIt<TabService>(),
+      historyService: getIt<DocumentHistoryService>(),
+    ),
+  );
 
   getIt.registerLazySingleton<TextEditorServiceRegistry>(
     () => TextEditorServiceRegistry(),

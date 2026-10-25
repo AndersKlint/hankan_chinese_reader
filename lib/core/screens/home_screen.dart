@@ -15,6 +15,7 @@ import 'package:hankan_chinese_reader/core/widgets/unsaved_changes_dialogs.dart'
 import 'package:hankan_chinese_reader/text_editor/screens/text_editor_screen.dart';
 import 'package:hankan_chinese_reader/text_editor/services/text_editor_service_registry.dart';
 import 'package:hankan_chinese_reader/pdf_reader/screens/pdf_reader_screen.dart';
+import 'package:hankan_chinese_reader/pdf_reader/services/pdf_annotation_service_registry.dart';
 import 'package:window_manager/window_manager.dart'
     if (dart.library.html) 'package:hankan_chinese_reader/core/stubs/window_manager_stub.dart';
 
@@ -49,6 +50,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
 
   @override
   void onWindowClose() {
+    if (getIt<PdfAnnotationServiceRegistry>().isBusy) return;
     if (_isClosing) return;
 
     final hasUnsaved = _tabService.tabs.value.any((t) => t.isModified);
@@ -83,7 +85,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
       unsavedCount: unsavedCount,
     );
 
-    if (shouldExit) {
+    if (shouldExit && !getIt<PdfAnnotationServiceRegistry>().isBusy) {
       _isClosing = true;
       await _closeWindow();
     }
@@ -327,6 +329,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
 
   Future<void> _handleCloseTab(BuildContext context, int index) async {
     final tab = _tabService.tabs.value[index];
+    final pdfService = getIt<PdfAnnotationServiceRegistry>().getService(tab.id);
+    if (pdfService?.isBusy ?? false) return;
     if (!tab.isModified) {
       _tabService.closeTab(index);
       return;
@@ -336,26 +340,52 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
       context,
       tabTitle: tab.title,
     );
+    if (pdfService?.isBusy ?? false) return;
+    final currentIndex = _tabService.tabs.value.indexWhere(
+      (item) => item.id == tab.id,
+    );
+    if (currentIndex < 0) return;
 
     switch (action) {
       case UnsavedTabAction.cancel:
         return;
       case UnsavedTabAction.discard:
-        _tabService.closeTab(index);
+        _tabService.closeTab(currentIndex);
         return;
       case UnsavedTabAction.save:
-        if (tab.type == DocumentType.text) {
-          final service = getIt<TextEditorServiceRegistry>().getService(tab.id);
-          final saved = await service?.save() ?? false;
-          if (saved) _tabService.closeTab(index);
-        } else {
-          _tabService.closeTab(index);
+        try {
+          final saved = tab.type == DocumentType.pdf
+              ? await pdfService?.save() ?? false
+              : await getIt<TextEditorServiceRegistry>()
+                        .getService(tab.id)
+                        ?.save() ??
+                    false;
+          final savedIndex = _tabService.tabs.value.indexWhere(
+            (item) => item.id == tab.id,
+          );
+          if (saved && savedIndex >= 0 && !(pdfService?.isBusy ?? false)) {
+            _tabService.closeTab(savedIndex);
+          }
+        } catch (error, stackTrace) {
+          _logger.warning(
+            'Could not save document before closing',
+            error,
+            stackTrace,
+          );
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Could not save document. The tab remains open.'),
+              ),
+            );
+          }
         }
         return;
     }
   }
 
   Future<void> _confirmAppExitMobile(BuildContext context) async {
+    if (getIt<PdfAnnotationServiceRegistry>().isBusy) return;
     final unsaved = _tabService.tabs.value.where((t) => t.isModified).length;
     if (unsaved == 0) {
       await SystemNavigator.pop();
@@ -367,7 +397,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
       unsavedCount: unsaved,
     );
 
-    if (shouldExit) {
+    if (shouldExit && !getIt<PdfAnnotationServiceRegistry>().isBusy) {
       await SystemNavigator.pop();
     }
   }
