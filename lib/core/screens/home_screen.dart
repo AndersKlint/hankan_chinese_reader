@@ -71,8 +71,9 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
   Future<void> _confirmCloseWithUnsavedChanges() async {
     if (_isClosing) return;
 
-    final unsavedCount =
-        _tabService.tabs.value.where((t) => t.isModified).length;
+    final unsavedCount = _tabService.tabs.value
+        .where((t) => t.isModified)
+        .length;
 
     final shouldExit = await showUnsavedAppCloseDialog(
       // ignore: use_build_context_synchronously
@@ -106,33 +107,35 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
               child: Scaffold(
                 appBar: PreferredSize(
                   preferredSize: const Size.fromHeight(46),
-                  child: LayoutBuilder(builder: (context, constraints) {
-                    final tabCount = _tabService.tabs.value.length;
-                    const actionsWidth = 200;
-                    const tabChipWidth = 160;
-                    final tabsNeed = tabCount.clamp(0, 3) * tabChipWidth;
-                    final fits =
-                        constraints.maxWidth >= actionsWidth + tabsNeed + 32;
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final tabCount = _tabService.tabs.value.length;
+                      const actionsWidth = 200;
+                      const tabChipWidth = 160;
+                      final tabsNeed = tabCount.clamp(0, 3) * tabChipWidth;
+                      final fits =
+                          constraints.maxWidth >= actionsWidth + tabsNeed + 32;
 
-                    return AppBar(
-                      toolbarHeight: 46,
-                      titleSpacing: 8,
-                      title: tabs.isEmpty
-                          ? null
-                          : _TabBar(
-                              tabs: tabs,
-                              activeIndex: activeIndex,
-                              onSelect: _tabService.setActiveTab,
-                              onClose: (index) =>
-                                  _handleCloseTab(context, index),
-                            ),
-                      actions: fits
-                          ? _buildDesktopActions(context, isDark)
-                          : <Widget>[
-                              _buildMobileActionButton(context, isDark),
-                            ],
-                    );
-                  }),
+                      return AppBar(
+                        toolbarHeight: 46,
+                        titleSpacing: 8,
+                        title: tabs.isEmpty
+                            ? null
+                            : _TabBar(
+                                tabs: tabs,
+                                activeIndex: activeIndex,
+                                onSelect: _tabService.setActiveTab,
+                                onClose: (index) =>
+                                    _handleCloseTab(context, index),
+                              ),
+                        actions: fits
+                            ? _buildDesktopActions(context, isDark)
+                            : <Widget>[
+                                _buildMobileActionButton(context, isDark),
+                              ],
+                      );
+                    },
+                  ),
                 ),
                 body: _buildBody(tabs, activeIndex),
               ),
@@ -147,14 +150,10 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
     return [
       IconButton(
         icon: Icon(
-          isDark
-              ? Icons.light_mode_outlined
-              : Icons.dark_mode_outlined,
+          isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
         ),
         visualDensity: VisualDensity.compact,
-        tooltip: isDark
-            ? 'Switch to light mode'
-            : 'Switch to dark mode',
+        tooltip: isDark ? 'Switch to light mode' : 'Switch to dark mode',
         onPressed: _themeService.toggleTheme,
       ),
       const VerticalDivider(width: 1, indent: 8, endIndent: 8),
@@ -174,14 +173,12 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
       ListenableBuilder(
         listenable: _documentHistoryService,
         builder: (context, _) {
-          final recentDocuments =
-              _documentHistoryService.recentDocuments;
+          final recentDocuments = _documentHistoryService.recentDocuments;
           final hasRecents = recentDocuments.isNotEmpty;
           return PopupMenuButton<RecentDocumentEntry>(
             tooltip: 'Recent documents',
             enabled: hasRecents,
-            onSelected: (entry) =>
-                _openRecentDocument(context, entry),
+            onSelected: (entry) => _openRecentDocument(context, entry),
             itemBuilder: (context) {
               return recentDocuments
                   .map((entry) {
@@ -189,9 +186,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
                       value: entry,
                       child: Tooltip(
                         message: entry.path,
-                        waitDuration: const Duration(
-                          milliseconds: 700,
-                        ),
+                        waitDuration: const Duration(milliseconds: 700),
                         child: SizedBox(
                           width: 260,
                           child: Text(
@@ -208,8 +203,9 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
               Icons.history_outlined,
               color: hasRecents
                   ? null
-                  : Theme.of(context).colorScheme.onSurface
-                        .withValues(alpha: 0.38),
+                  : Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.38),
             ),
           );
         },
@@ -229,9 +225,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
             child: Row(
               children: [
                 Icon(
-                  isDark
-                      ? Icons.light_mode_outlined
-                      : Icons.dark_mode_outlined,
+                  isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
                   size: 20,
                 ),
                 const SizedBox(width: 12),
@@ -262,24 +256,17 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
           ),
         ];
 
-        final recentDocuments =
-            _documentHistoryService.recentDocuments;
+        final recentDocuments = _documentHistoryService.recentDocuments;
         if (recentDocuments.isNotEmpty) {
           items.add(const PopupMenuDivider());
           items.add(
             PopupMenuItem(
               enabled: false,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 4,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: Text(
                 'Recent documents',
-                style: Theme.of(
-                  menuContext,
-                ).textTheme.labelMedium?.copyWith(
-                  color:
-                      Theme.of(menuContext).colorScheme.onSurfaceVariant,
+                style: Theme.of(menuContext).textTheme.labelMedium?.copyWith(
+                  color: Theme.of(menuContext).colorScheme.onSurfaceVariant,
                 ),
               ),
             ),
@@ -287,14 +274,10 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
           for (final entry in recentDocuments) {
             items.add(
               PopupMenuItem(
-                onTap: () =>
-                    _openRecentDocument(context, entry),
+                onTap: () => _openRecentDocument(context, entry),
                 child: SizedBox(
                   width: 260,
-                  child: Text(
-                    entry.title,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  child: Text(entry.title, overflow: TextOverflow.ellipsis),
                 ),
               ),
             );
@@ -398,10 +381,8 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
 
   Future<void> _openFile(BuildContext context) async {
     final fileService = getIt<FileService>();
-    final result = await fileService.pickFile();
-    if (result == null || result.files.isEmpty) return;
-
-    final file = result.files.first;
+    final file = await fileService.pickFile();
+    if (file == null) return;
 
     // On web, path is null or a blob URL - use bytes instead
     if (file.path != null && !file.path!.startsWith('blob:')) {
@@ -417,7 +398,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
 
     if (_documentTypeForName(file.name) == DocumentType.pdf) return;
 
-    final bytes = file.bytes ?? await file.xFile.readAsBytes();
+    final bytes = await file.readAsBytes();
     _tabService.addTab(
       title: file.name,
       type: DocumentType.text,

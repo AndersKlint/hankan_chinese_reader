@@ -9,13 +9,12 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 class FileService {
   /// Shows an open-file dialog filtered to [extensions].
   /// Returns the picked file result, or `null` if cancelled.
-  Future<FilePickerResult?> pickFile({
+  Future<PlatformFile?> pickFile({
     List<String> extensions = const ['txt', 'pdf'],
   }) async {
-    return FilePicker.pickFiles(
+    return FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: extensions,
-      withData: true,
     );
   }
 
@@ -35,15 +34,17 @@ class FileService {
     required String content,
     String? existingPath,
   }) async {
-    if (kIsWeb || existingPath == null) {
+    final isContentUri = Uri.tryParse(existingPath ?? '')?.scheme == 'content';
+    if (kIsWeb || existingPath == null || isContentUri) {
       final bytes = Uint8List.fromList(utf8.encode(content));
-      return FilePicker.saveFile(
+      final uri = await FilePicker.saveFile(
         dialogTitle: 'Save text file',
         fileName: 'document.txt',
-        type: FileType.custom,
-        allowedExtensions: ['txt'],
+        mimeType: 'text/plain',
         bytes: bytes,
       );
+      if (uri == null) return null;
+      return uri.scheme == 'file' ? uri.toFilePath() : uri.toString();
     }
 
     final file = File(existingPath);

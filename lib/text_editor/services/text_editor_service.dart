@@ -31,9 +31,7 @@ class TextEditorService {
 
   /// Creates a new service. [fileService] and [tabService] are optional so
   /// unit tests can construct the service without a full DI container.
-  TextEditorService({FileService? fileService, TabService? tabService})
-    : _fileService = fileService,
-      _tabService = tabService;
+  TextEditorService({this._fileService, this._tabService});
 
   /// Initializes the service with the given [text].
   void initialize(

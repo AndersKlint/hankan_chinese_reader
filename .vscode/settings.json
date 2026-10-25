@@ -1,3 +1,14 @@
 {
-    "cmake.sourceDirectory": "/home/anders/git/hankan_chinese_reader/linux"
+    "cmake.sourceDirectory": "/home/anders/git/hankan_chinese_reader/linux",
+    "files.watcherExclude": {
+        ".git/objects/**": true,
+        ".git/subtree-cache/**": true,
+        ".hg/store/**": true,
+        "*/.git/objects/**": true,
+        "*/.git/subtree-cache/**": true,
+        "*/.hg/store/**": true,
+        "**/.dart_tool": true,
+        ".flatpak/**": true,
+        "_build/**": true
+    }
 }

@@ -1,34 +1,29 @@
 name: hankan_chinese_reader
 description: "A Chinese reading assistant with popup dictionary support."
-publish_to: 'none'
+publish_to: "none"
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.11.0
+  sdk: ^3.13.0
+  flutter: ">=3.47.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^2.0.0
   chinese_popup_dict:
-    git:
-      url: https://github.com/AndersKlint/flutter_package_chinese_popup_dict.git
-      ref: bbfac9d1f4a633169281023a3faf0ba420eab757
-    # path: ../chinese_popup_dict
+    path: ../chinese_popup_dict
   dart_paddle_ocr:
-    git:
-      url: https://github.com/AndersKlint/dart_paddle_ocr.git
-      ref: 96da79d935b95f1475bf8734091da7fefd737b19
-    # path: ../dart_paddle_ocr
-  get_it: ^9.0.0
-  watch_it: ^2.4.2
-  pdfrx: ^2.2.0
-  file_picker: ^11.0.2
-  google_fonts: ^8.0.2
+    path: ../dart_paddle_ocr
+  get_it: ^9.3.0
+  watch_it: ^2.5.0
+  pdfrx: ^2.10.1
+  file_picker: ^13.2.0
+  google_fonts: ^9.0.0
   logging: ^1.3.0
-  image: ^4.8.0
-  shared_preferences: ^2.5.5
-  window_manager: ^0.5.1
+  image: ^4.12.0
+  shared_preferences: ^2.5.6
+  window_manager: ^0.5.2
 
 dev_dependencies:
   flutter_test:

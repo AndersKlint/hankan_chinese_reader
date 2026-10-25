@@ -68,7 +68,8 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
     _autoScrollController = PdfAutoScrollController(
       controller: _pdfController,
       getViewportSize: () {
-        final box = _pdfViewerKey.currentContext?.findRenderObject() as RenderBox?;
+        final box =
+            _pdfViewerKey.currentContext?.findRenderObject() as RenderBox?;
         return box?.size ?? Size.zero;
       },
     );
@@ -201,7 +202,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
     if (hasUsableCenter) {
       final clampedZoom = savedState.zoom.clamp(
         _pdfController.minScale,
-        _pdfController.params.maxScale,
+        _pdfController.maxScale,
       );
 
       // Navigate to the saved page first — this anchors the page number
@@ -406,7 +407,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
     final position = localPosition ?? _viewerCenterLocalPosition();
     final targetZoom = (_pdfController.currentZoom * factor).clamp(
       _pdfController.minScale,
-      _pdfController.params.maxScale,
+      _pdfController.maxScale,
     );
     await _pdfController.zoomOnLocalPosition(
       localPosition: position,
@@ -439,7 +440,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
       final targetZoom = _pdfController.currentZoom * factor;
       final clampedZoom = targetZoom.clamp(
         _pdfController.minScale,
-        _pdfController.params.maxScale,
+        _pdfController.maxScale,
       );
 
       _pdfController.zoomOnLocalPosition(
@@ -483,7 +484,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
         scaleFactorFromGesture;
     final clampedZoom = targetZoom.clamp(
       _pdfController.minScale,
-      _pdfController.params.maxScale,
+      _pdfController.maxScale,
     );
 
     _pdfController.zoomOnLocalPosition(
@@ -587,10 +588,14 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                             behavior: HitTestBehavior.translucent,
                             onPointerSignal: _onPointerSignal,
                             onPointerPanZoomUpdate: _onPointerPanZoomUpdate,
-                            onPointerDown: _autoScrollController.handlePointerDown,
-                            onPointerMove: _autoScrollController.handlePointerMove,
-                            onPointerUp: (_) => _autoScrollController.handlePointerUp(),
-                            onPointerCancel: _autoScrollController.handlePointerCancel,
+                            onPointerDown:
+                                _autoScrollController.handlePointerDown,
+                            onPointerMove:
+                                _autoScrollController.handlePointerMove,
+                            onPointerUp: (_) =>
+                                _autoScrollController.handlePointerUp(),
+                            onPointerCancel:
+                                _autoScrollController.handlePointerCancel,
                             child: RepaintBoundary(
                               key: _pdfViewerKey,
                               child: PdfViewer.file(

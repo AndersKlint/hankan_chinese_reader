@@ -9,9 +9,8 @@ list(APPEND FLUTTER_PLUGIN_LIST
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
+  dart_paddle_ocr
   jni
-  onnxruntime_v2
-  pdfium_flutter
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

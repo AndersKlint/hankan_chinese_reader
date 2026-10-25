@@ -12,12 +12,11 @@ import 'package:pdfrx/pdfrx.dart';
 /// the selection can continue beyond the visible area.
 class PdfAutoScrollController {
   PdfAutoScrollController({
-    required PdfViewerController controller,
-    required Size Function() getViewportSize,
+    required this._controller,
+    required this._getViewportSize,
     this.edgeThreshold = 60.0,
     this.maxScrollSpeed = 500.0,
-  })  : _controller = controller,
-        _getViewportSize = getViewportSize;
+  });
 
   final PdfViewerController _controller;
   final Size Function() _getViewportSize;
