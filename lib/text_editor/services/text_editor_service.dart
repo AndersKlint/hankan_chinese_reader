@@ -123,7 +123,7 @@ class TextEditorService {
     controller.readOnly = isReadMode.value;
   }
 
-  Future<bool> save() async {
+  Future<bool> save({bool saveAs = false}) async {
     final fileService = _fileService;
     if (fileService == null) return false;
     final document = controller.document;
@@ -137,7 +137,7 @@ class TextEditorService {
     try {
       final savedPath = await fileService.saveTextFile(
         content: saveContent,
-        existingPath: forceSaveAs ? null : path,
+        existingPath: saveAs || forceSaveAs ? null : path,
         fileName: forceSaveAs
             ? baseName.replaceFirst(
                 RegExp(r'\.txt$', caseSensitive: false),

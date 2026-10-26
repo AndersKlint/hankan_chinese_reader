@@ -408,9 +408,9 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
     });
   }
 
-  Future<void> _save() async {
+  Future<void> _save({bool saveAs = false}) async {
     try {
-      await _editorService.save();
+      await _editorService.save(saveAs: saveAs);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -469,6 +469,13 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
           _editAction(_editorService.redo),
       SingleActivator(LogicalKeyboardKey.keyS, control: !meta, meta: meta):
           _save,
+      SingleActivator(
+        LogicalKeyboardKey.keyS,
+        control: !meta,
+        meta: meta,
+        shift: true,
+      ): () =>
+          _save(saveAs: true),
       SingleActivator(LogicalKeyboardKey.keyF, control: !meta, meta: meta):
           _activateSearch,
       SingleActivator(LogicalKeyboardKey.keyV, control: !meta, meta: meta):
@@ -476,7 +483,6 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
       SingleActivator(LogicalKeyboardKey.digit0, control: !meta, meta: meta):
           _resetZoom,
       for (final key in [
-        LogicalKeyboardKey.keyS,
         LogicalKeyboardKey.keyB,
         LogicalKeyboardKey.keyC,
         LogicalKeyboardKey.keyO,
@@ -554,6 +560,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
               isReadMode: isReadMode,
               onToggleMode: _toggleMode,
               onSave: _save,
+              onSaveAs: () => _save(saveAs: true),
               onSearch: _activateSearch,
               onZoomIn: _zoomIn,
               onZoomOut: _zoomOut,
@@ -656,6 +663,7 @@ class _Toolbar extends StatelessWidget {
   final bool isReadMode;
   final VoidCallback onToggleMode;
   final VoidCallback onSave;
+  final VoidCallback onSaveAs;
   final VoidCallback onSearch;
   final VoidCallback onZoomOut;
   final VoidCallback onZoomIn;
@@ -666,6 +674,7 @@ class _Toolbar extends StatelessWidget {
     required this.isReadMode,
     required this.onToggleMode,
     required this.onSave,
+    required this.onSaveAs,
     required this.onSearch,
     required this.onZoomOut,
     required this.onZoomIn,
@@ -687,24 +696,15 @@ class _Toolbar extends StatelessWidget {
         ),
       ),
       child: LayoutBuilder(
-        builder: (context, constraints) {
-          if (constraints.maxWidth >= 500) {
-            return _buildDesktopBar(context, colorScheme);
-          }
-          return _buildMobileBar(
-            context,
-            colorScheme,
-            showSearchInline: constraints.maxWidth >= 370,
-          );
-        },
+        builder: (context, constraints) =>
+            _buildBar(showZoom: constraints.maxWidth >= 340),
       ),
     );
   }
 
-  Widget _buildDesktopBar(BuildContext context, ColorScheme colorScheme) {
+  Widget _buildBar({required bool showZoom}) {
     return Row(
       children: [
-        // Edit / Read toggle
         TextButton.icon(
           icon: Icon(
             isReadMode ? Icons.edit_outlined : Icons.auto_stories,
@@ -726,105 +726,57 @@ class _Toolbar extends StatelessWidget {
           iconSize: 18,
           visualDensity: VisualDensity.compact,
         ),
-        const VerticalDivider(indent: 10, endIndent: 10),
-        IconButton(
-          icon: const Icon(Icons.remove, size: 18),
-          tooltip: 'Decrease text size (Ctrl + Minus)',
-          onPressed: canZoomOut ? onZoomOut : null,
-          visualDensity: VisualDensity.compact,
-        ),
-        IconButton(
-          icon: const Icon(Icons.add, size: 18),
-          tooltip: 'Increase text size (Ctrl + Plus)',
-          onPressed: canZoomIn ? onZoomIn : null,
-          visualDensity: VisualDensity.compact,
-        ),
+        if (showZoom) ...[
+          const VerticalDivider(indent: 10, endIndent: 10),
+          IconButton(
+            icon: const Icon(Icons.remove, size: 18),
+            tooltip: 'Zoom out (Ctrl + Minus)',
+            onPressed: canZoomOut ? onZoomOut : null,
+            visualDensity: VisualDensity.compact,
+          ),
+          IconButton(
+            icon: const Icon(Icons.add, size: 18),
+            tooltip: 'Zoom in (Ctrl + Plus)',
+            onPressed: canZoomIn ? onZoomIn : null,
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+        const Spacer(),
         IconButton(
           icon: const Icon(Icons.save_outlined),
-          tooltip: 'Save (Ctrl+S)',
+          tooltip: 'Save (Ctrl/Cmd+S)',
           onPressed: onSave,
           iconSize: 18,
           visualDensity: VisualDensity.compact,
         ),
 
-        const Spacer(),
-
-        // Mode badge
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: isReadMode
-                ? colorScheme.tertiaryContainer
-                : colorScheme.secondaryContainer,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            isReadMode ? 'Reading' : 'Editing',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: isReadMode
-                  ? colorScheme.onTertiaryContainer
-                  : colorScheme.onSecondaryContainer,
-            ),
-          ),
-        ),
+        _overflowMenu(),
       ],
     );
   }
 
-  Widget _buildMobileBar(
-    BuildContext context,
-    ColorScheme colorScheme, {
-    bool showSearchInline = true,
-  }) {
-    return Row(
-      children: [
-        TextButton.icon(
-          icon: Icon(
-            isReadMode ? Icons.edit_outlined : Icons.auto_stories,
-            size: 18,
-          ),
-          label: Text(isReadMode ? 'Edit' : 'Read'),
-          onPressed: onToggleMode,
-          style: TextButton.styleFrom(
-            visualDensity: VisualDensity.compact,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-          ),
-        ),
-        const VerticalDivider(indent: 10, endIndent: 10),
-        if (showSearchInline) ...[
-          IconButton(
-            icon: const Icon(Icons.search),
-            tooltip: 'Search',
-            onPressed: onSearch,
-            iconSize: 18,
-            visualDensity: VisualDensity.compact,
-          ),
-          const VerticalDivider(indent: 10, endIndent: 10),
-        ],
-        IconButton(
-          icon: const Icon(Icons.remove, size: 18),
-          tooltip: 'Decrease text size',
-          onPressed: canZoomOut ? onZoomOut : null,
-          visualDensity: VisualDensity.compact,
-        ),
-        IconButton(
-          icon: const Icon(Icons.add, size: 18),
-          tooltip: 'Increase text size',
-          onPressed: canZoomIn ? onZoomIn : null,
-          visualDensity: VisualDensity.compact,
-        ),
-        PopupMenuButton(
-          icon: const Icon(Icons.more_vert, size: 18),
-          tooltip: 'More',
-          itemBuilder: (context) => [
-            if (!showSearchInline)
-              PopupMenuItem(onTap: onSearch, child: const Text('Search')),
-            PopupMenuItem(onTap: onSave, child: const Text('Save')),
-          ],
-        ),
-      ],
-    );
-  }
+  Widget _overflowMenu() => PopupMenuButton<VoidCallback>(
+    icon: const Icon(Icons.more_vert, size: 18),
+    tooltip: 'Editor actions',
+    onSelected: (action) => action(),
+    itemBuilder: (context) => [
+      PopupMenuItem(value: onSave, child: const Text('Save')),
+      PopupMenuItem(value: onSaveAs, child: const Text('Save As…')),
+      PopupMenuItem(value: onSearch, child: const Text('Search')),
+      PopupMenuItem(
+        value: onToggleMode,
+        child: Text(isReadMode ? 'Edit' : 'Read'),
+      ),
+      PopupMenuItem(
+        value: onZoomIn,
+        enabled: canZoomIn,
+        child: const Text('Zoom in'),
+      ),
+      PopupMenuItem(
+        value: onZoomOut,
+        enabled: canZoomOut,
+        child: const Text('Zoom out'),
+      ),
+    ],
+  );
 }

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
 
-/// Top toolbar for the PDF reader with search, thumbnail toggle, and page nav.
 class PdfToolbar extends StatelessWidget {
   final bool showThumbnails;
   final VoidCallback onToggleThumbnails;
@@ -59,7 +58,6 @@ class PdfToolbar extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
-      height: 40,
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHigh,
         border: Border(
@@ -68,24 +66,56 @@ class PdfToolbar extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          const double minDesktopWidth = 720;
-          if (constraints.maxWidth >= minDesktopWidth) {
-            return _buildDesktopToolbar(context);
-          }
-          return _buildMobileToolbar(context);
+          const primaryWidth = 232.0;
+          final inlineNavigation = constraints.maxWidth >= 340;
+          final toolbar = _buildDesktopToolbar(
+            context,
+            inlineNavigation: inlineNavigation,
+            showZoom: constraints.maxWidth >= 440,
+            showEditing: constraints.maxWidth >= 560,
+          );
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 40,
+                child: constraints.maxWidth < primaryWidth
+                    ? SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(width: primaryWidth, child: toolbar),
+                      )
+                    : toolbar,
+              ),
+              if (!inlineNavigation)
+                SizedBox(
+                  height: 40,
+                  child: Center(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: _pageInput(),
+                    ),
+                  ),
+                ),
+            ],
+          );
         },
       ),
     );
   }
 
-  Widget _buildDesktopToolbar(BuildContext context) {
+  Widget _buildDesktopToolbar(
+    BuildContext context, {
+    required bool inlineNavigation,
+    required bool showZoom,
+    required bool showEditing,
+  }) {
     final colorScheme = Theme.of(context).colorScheme;
     final inactiveOcrColor = colorScheme.onSurfaceVariant;
     final activeOcrColor = colorScheme.onSurface;
 
     return Row(
       children: [
-        IconButton(
+        _iconButton(
           icon: Icon(
             showThumbnails ? Icons.view_sidebar : Icons.view_sidebar_outlined,
             size: 18,
@@ -95,135 +125,152 @@ class PdfToolbar extends StatelessWidget {
           visualDensity: VisualDensity.compact,
         ),
 
-        const VerticalDivider(width: 1, indent: 8, endIndent: 8),
-
-        IconButton(
+        _iconButton(
           icon: const Icon(Icons.search, size: 18),
           tooltip: 'Search in document (Ctrl+F)',
           onPressed: textSearcher != null ? onActivateSearch : null,
           visualDensity: VisualDensity.compact,
         ),
 
-        const VerticalDivider(width: 1, indent: 8, endIndent: 8),
+        if (showZoom) ...[
+          const VerticalDivider(width: 1, indent: 8, endIndent: 8),
+          _iconButton(
+            icon: const Icon(Icons.remove, size: 18),
+            tooltip: 'Zoom out (Ctrl + Minus)',
+            onPressed: canZoom ? onZoomOut : null,
+            visualDensity: VisualDensity.compact,
+          ),
+          _iconButton(
+            icon: const Icon(Icons.add, size: 18),
+            tooltip: 'Zoom in (Ctrl + Plus)',
+            onPressed: canZoom ? onZoomIn : null,
+            visualDensity: VisualDensity.compact,
+          ),
 
-        IconButton(
-          icon: const Icon(Icons.remove, size: 18),
-          tooltip: 'Zoom out (Ctrl + Minus)',
-          onPressed: canZoom ? onZoomOut : null,
-          visualDensity: VisualDensity.compact,
-        ),
-        IconButton(
-          icon: const Icon(Icons.add, size: 18),
-          tooltip: 'Zoom in (Ctrl + Plus)',
-          onPressed: canZoom ? onZoomIn : null,
-          visualDensity: VisualDensity.compact,
-        ),
+          const VerticalDivider(width: 1, indent: 8, endIndent: 8),
+        ],
 
-        const VerticalDivider(width: 1, indent: 8, endIndent: 8),
-
-        Tooltip(
-          message: 'Toggle OCR dictionary lookup',
-          child: TextButton(
-            onPressed: canToggleOcr ? () => onOcrChanged(!ocrEnabled) : null,
-            style: TextButton.styleFrom(
-              foregroundColor: ocrEnabled ? activeOcrColor : inactiveOcrColor,
-              textStyle: Theme.of(context).textTheme.labelMedium?.copyWith(
-                fontWeight: ocrEnabled ? FontWeight.w600 : FontWeight.w400,
+        SizedBox(
+          width: 56,
+          child: Tooltip(
+            message: 'Toggle OCR dictionary lookup',
+            child: TextButton(
+              onPressed: canToggleOcr ? () => onOcrChanged(!ocrEnabled) : null,
+              style: TextButton.styleFrom(
+                foregroundColor: ocrEnabled ? activeOcrColor : inactiveOcrColor,
+                textStyle: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  fontWeight: ocrEnabled ? FontWeight.w600 : FontWeight.w400,
+                ),
+                minimumSize: const Size(48, 30),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
               ),
-              minimumSize: const Size(48, 30),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: const Text('OCR'),
             ),
-            child: const Text('OCR'),
           ),
         ),
-        Tooltip(
-          message: 'Toggle popup dictionary',
-          child: TextButton(
-            onPressed: () => onPopupDictChanged(!popupDictEnabled),
-            style: TextButton.styleFrom(
-              foregroundColor: popupDictEnabled
-                  ? activeOcrColor
-                  : inactiveOcrColor,
-              textStyle: Theme.of(context).textTheme.labelMedium?.copyWith(
-                fontWeight: popupDictEnabled
-                    ? FontWeight.w600
-                    : FontWeight.w400,
+        SizedBox(
+          width: 56,
+          child: Tooltip(
+            message: 'Toggle popup dictionary',
+            child: TextButton(
+              onPressed: () => onPopupDictChanged(!popupDictEnabled),
+              style: TextButton.styleFrom(
+                foregroundColor: popupDictEnabled
+                    ? activeOcrColor
+                    : inactiveOcrColor,
+                textStyle: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  fontWeight: popupDictEnabled
+                      ? FontWeight.w600
+                      : FontWeight.w400,
+                ),
+                minimumSize: const Size(48, 30),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
               ),
-              minimumSize: const Size(48, 30),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: const Text('Dict'),
             ),
-            child: const Text('Dict'),
           ),
         ),
 
         const Spacer(),
 
-        IconButton(
-          tooltip: highlightColor == null
-              ? 'Clear selected highlighting'
-              : 'Highlight selected text',
-          icon: Icon(
-            highlightColor == null ? Icons.format_color_reset : Icons.highlight,
-            color: canEdit ? highlightColor : null,
+        if (showEditing) ...[
+          _iconButton(
+            tooltip: highlightColor == null
+                ? 'Clear selected highlighting'
+                : 'Highlight selected text',
+            icon: Icon(
+              highlightColor == null
+                  ? Icons.format_color_reset
+                  : Icons.highlight,
+              color: canEdit ? highlightColor : null,
+            ),
+            onPressed: canEdit && hasSelection ? onHighlight : null,
           ),
-          onPressed: canEdit && hasSelection ? onHighlight : null,
-        ),
-        IconButton(
-          tooltip: 'Highlight color',
-          icon: const Icon(Icons.palette_outlined, size: 18),
-          onPressed: canEdit ? onChooseColor : null,
-        ),
-        IconButton(
-          tooltip: 'Save (Ctrl/Cmd+S)',
-          icon: const Icon(Icons.save_outlined, size: 18),
-          onPressed: canEdit ? onSave : null,
-        ),
-        _overflowMenu(),
+          _iconButton(
+            tooltip: 'Highlight color',
+            icon: const Icon(Icons.palette_outlined, size: 18),
+            onPressed: canEdit ? onChooseColor : null,
+          ),
+          _iconButton(
+            tooltip: 'Save (Ctrl/Cmd+S)',
+            icon: const Icon(Icons.save_outlined, size: 18),
+            onPressed: canEdit ? onSave : null,
+          ),
+        ],
+        SizedBox(width: 40, child: _overflowMenu()),
 
-        _PageInput(
-          currentPage: currentPage,
-          pageCount: pageCount,
-          onPageSubmitted: onPageSubmitted,
-        ),
-
-        const SizedBox(width: 6),
+        if (inlineNavigation) ...[
+          SizedBox(
+            width: 100,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                reverse: true,
+                child: _pageInput(),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+        ],
       ],
     );
   }
 
-  Widget _buildMobileToolbar(BuildContext context) {
-    return Row(
-      children: [
-        IconButton(
-          tooltip: 'Search in document',
-          icon: const Icon(Icons.search, size: 18),
-          onPressed: textSearcher != null ? onActivateSearch : null,
-        ),
-        IconButton(
-          tooltip: highlightColor == null
-              ? 'Clear selected highlighting'
-              : 'Highlight selected text',
-          icon: Icon(
-            highlightColor == null ? Icons.format_color_reset : Icons.highlight,
-            color: canEdit ? highlightColor : null,
-          ),
-          onPressed: canEdit && hasSelection ? onHighlight : null,
-        ),
-        const Spacer(),
-        _PageInput(
-          currentPage: currentPage,
-          pageCount: pageCount,
-          onPageSubmitted: onPageSubmitted,
-        ),
-        _overflowMenu(),
-      ],
-    );
-  }
+  Widget _iconButton({
+    required Widget icon,
+    required String tooltip,
+    required VoidCallback? onPressed,
+    VisualDensity visualDensity = VisualDensity.compact,
+  }) => SizedBox(
+    width: 40,
+    child: IconButton(
+      icon: icon,
+      tooltip: tooltip,
+      onPressed: onPressed,
+      visualDensity: visualDensity,
+    ),
+  );
+
+  Widget _pageInput() => _PageInput(
+    currentPage: currentPage,
+    pageCount: pageCount,
+    onPageSubmitted: onPageSubmitted,
+  );
 
   Widget _overflowMenu() => PopupMenuButton<VoidCallback>(
     tooltip: 'PDF actions',
     onSelected: (action) => action(),
     itemBuilder: (context) => [
+      PopupMenuItem(
+        value: onHighlight,
+        enabled: canEdit && hasSelection,
+        child: Text(
+          highlightColor == null
+              ? 'Clear selected highlighting'
+              : 'Highlight selected text',
+        ),
+      ),
       PopupMenuItem(value: onSave, enabled: canEdit, child: const Text('Save')),
       PopupMenuItem(
         value: onSaveAs,
@@ -266,7 +313,6 @@ class PdfToolbar extends StatelessWidget {
   );
 }
 
-/// Editable page number input with total page count.
 class _PageInput extends StatefulWidget {
   final int currentPage;
   final int pageCount;
