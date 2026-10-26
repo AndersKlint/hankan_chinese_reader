@@ -14,6 +14,7 @@ import 'package:hankan_chinese_reader/core/services/tab_service.dart';
 import 'package:hankan_chinese_reader/text_editor/models/text_search_result.dart';
 import 'package:hankan_chinese_reader/text_editor/services/text_editor_service.dart';
 import 'package:hankan_chinese_reader/text_editor/services/text_editor_service_registry.dart';
+import 'package:hankan_chinese_reader/text_editor/services/text_pdf_export_service.dart';
 import 'package:hankan_chinese_reader/text_editor/widgets/text_content_style.dart';
 import 'package:hankan_chinese_reader/text_editor/widgets/text_edit_view.dart';
 import 'package:hankan_chinese_reader/text_editor/widgets/text_read_view.dart';
@@ -419,6 +420,21 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
     }
   }
 
+  Future<void> _exportPdf() async {
+    try {
+      await getIt<TextPdfExportService>().export(
+        _editorService.controller.document.toDelta(),
+        sourceName: _tab.filePath ?? _tab.title,
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not export PDF: $error')));
+      }
+    }
+  }
+
   Future<void> _paste() async {
     try {
       await _clipboard.paste(_editorService.controller);
@@ -561,6 +577,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
               onToggleMode: _toggleMode,
               onSave: _save,
               onSaveAs: () => _save(saveAs: true),
+              onExportPdf: _exportPdf,
               onSearch: _activateSearch,
               onZoomIn: _zoomIn,
               onZoomOut: _zoomOut,
@@ -664,6 +681,7 @@ class _Toolbar extends StatelessWidget {
   final VoidCallback onToggleMode;
   final VoidCallback onSave;
   final VoidCallback onSaveAs;
+  final VoidCallback onExportPdf;
   final VoidCallback onSearch;
   final VoidCallback onZoomOut;
   final VoidCallback onZoomIn;
@@ -675,6 +693,7 @@ class _Toolbar extends StatelessWidget {
     required this.onToggleMode,
     required this.onSave,
     required this.onSaveAs,
+    required this.onExportPdf,
     required this.onSearch,
     required this.onZoomOut,
     required this.onZoomIn,
@@ -762,6 +781,7 @@ class _Toolbar extends StatelessWidget {
     itemBuilder: (context) => [
       PopupMenuItem(value: onSave, child: const Text('Save')),
       PopupMenuItem(value: onSaveAs, child: const Text('Save As…')),
+      PopupMenuItem(value: onExportPdf, child: const Text('Export as PDF…')),
       PopupMenuItem(value: onSearch, child: const Text('Search')),
       PopupMenuItem(
         value: onToggleMode,

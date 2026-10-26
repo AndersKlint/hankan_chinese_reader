@@ -6,6 +6,7 @@ import 'package:hankan_chinese_reader/core/services/tab_service.dart';
 import 'package:hankan_chinese_reader/core/services/theme_service.dart';
 import 'package:hankan_chinese_reader/pdf_reader/services/pdf_ocr_service.dart';
 import 'package:hankan_chinese_reader/text_editor/services/text_editor_service.dart';
+import 'package:hankan_chinese_reader/text_editor/services/text_pdf_export_service.dart';
 import 'package:hankan_chinese_reader/text_editor/services/text_editor_service_registry.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -24,6 +25,9 @@ Future<void> setupServiceLocator() async {
 
   getIt.registerLazySingleton<TabService>(() => TabService());
   getIt.registerLazySingleton<FileService>(() => FileService());
+  getIt.registerLazySingleton<TextPdfExportService>(
+    () => TextPdfExportService(getIt<FileService>()),
+  );
   getIt.registerLazySingleton<ThemeService>(() => ThemeService());
   getIt.registerLazySingleton<PdfOcrService>(() => PdfOcrService());
   getIt.registerSingleton<DocumentHistoryService>(documentHistoryService);

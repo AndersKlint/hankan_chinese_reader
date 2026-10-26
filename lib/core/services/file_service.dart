@@ -10,6 +10,45 @@ import '../../pdf_reader/repositories/pdf_annotation_repository.dart';
 
 /// Handles file picking, reading, and saving across platforms.
 class FileService {
+  Future<String?> savePdfFile({
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    String withExtension(String path) => path.toLowerCase().endsWith('.pdf')
+        ? path
+        : '${path.replaceFirst(RegExp(r'\.[^./\\]+$'), '')}.pdf';
+    var suggestedName = withExtension(fileName);
+    if (!kIsWeb &&
+        (Platform.isLinux || Platform.isMacOS || Platform.isWindows)) {
+      String? initialDirectory;
+      while (true) {
+        final location = await file_selector.getSaveLocation(
+          suggestedName: suggestedName,
+          initialDirectory: initialDirectory,
+          acceptedTypeGroups: [
+            const file_selector.XTypeGroup(label: 'PDF', extensions: ['pdf']),
+          ],
+        );
+        if (location == null) return null;
+        final path = withExtension(location.path);
+        if (path == location.path) {
+          await File(path).writeAsBytes(bytes);
+          return path;
+        }
+        initialDirectory = File(path).parent.path;
+        suggestedName = Uri.file(path).pathSegments.last;
+      }
+    }
+    final uri = await FilePicker.saveFile(
+      dialogTitle: 'Export as PDF',
+      fileName: suggestedName,
+      mimeType: 'application/pdf',
+      bytes: bytes,
+    );
+    if (uri == null) return null;
+    return uri.scheme == 'file' ? uri.toFilePath() : uri.toString();
+  }
+
   Future<Uint8List> readPdfFile(String path) =>
       PdfAnnotationRepository().read(path);
 

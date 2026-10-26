@@ -73,6 +73,7 @@ class PdfToolbar extends StatelessWidget {
             inlineNavigation: inlineNavigation,
             showZoom: constraints.maxWidth >= 440,
             showEditing: constraints.maxWidth >= 560,
+            availableWidth: constraints.maxWidth,
           );
           return Column(
             mainAxisSize: MainAxisSize.min,
@@ -108,6 +109,7 @@ class PdfToolbar extends StatelessWidget {
     required bool inlineNavigation,
     required bool showZoom,
     required bool showEditing,
+    required double availableWidth,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
     final inactiveOcrColor = colorScheme.onSurfaceVariant;
@@ -220,15 +222,18 @@ class PdfToolbar extends StatelessWidget {
         SizedBox(width: 40, child: _overflowMenu()),
 
         if (inlineNavigation) ...[
-          SizedBox(
-            width: 100,
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                reverse: true,
-                child: _pageInput(),
-              ),
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth:
+                  availableWidth -
+                  238 -
+                  (showZoom ? 82 : 0) -
+                  (showEditing ? 120 : 0),
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              reverse: true,
+              child: _pageInput(),
             ),
           ),
           const SizedBox(width: 6),
