@@ -9,7 +9,7 @@ import 'package:pdfrx/pdfrx.dart';
 /// Performs targeted OCR on PDF page crops for tap-driven dictionary lookups.
 class PdfOcrService {
   /// Fraction of page width used for the OCR crop area.
-  static const double _cropWidthFraction = 0.10;
+  static const double _cropWidthFraction = 0.15;
 
   /// Divisor for calculating crop height from page width (width / _cropHeightMultiplier).
   static const double _cropHeightMultiplier = 2;
@@ -155,13 +155,15 @@ class PdfOcrService {
   }
 
   PdfRect _buildCropRect({required PdfPage page, required PdfPoint pagePoint}) {
-    final cropWidth = (page.width * _cropWidthFraction).clamp(80.0, page.width);
+    final cropWidth = (page.width * _cropWidthFraction)
+        .clamp(120.0, double.infinity)
+        .clamp(0.0, page.width);
     final cropHeight = (page.height / _cropHeightMultiplier).clamp(
       36.0,
       page.height * _maxCropHeightFraction,
     );
 
-    final left = (pagePoint.x - cropWidth / 2).clamp(
+    final left = (pagePoint.x - cropWidth * 0.2).clamp(
       0.0,
       page.width - cropWidth,
     );
