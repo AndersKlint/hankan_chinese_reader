@@ -62,6 +62,7 @@ class TabModel {
   /// For PDFs, explicit OCR mode override. When null, current-page text
   /// availability decides whether OCR starts enabled.
   bool? pdfOcrEnabled;
+  bool pdfPopupDictEnabled;
 
   TabModel({
     required this.id,
@@ -82,5 +83,6 @@ class TabModel {
     this.showPdfSearch = false,
     this.pdfSearchQuery = '',
     this.pdfOcrEnabled,
+    this.pdfPopupDictEnabled = true,
   });
 }

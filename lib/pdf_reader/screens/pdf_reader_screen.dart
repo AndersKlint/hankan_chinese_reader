@@ -75,6 +75,8 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   bool _showThumbnails = false;
   bool _showSearchBar = false;
   bool? _ocrEnabled;
+  bool _popupDictEnabled = true;
+  int _popupDictRevision = 0;
   final Map<int, bool> _pageHasTextLayer = {};
   bool _isPerformingOcrLookup = false;
   bool _showProgressIndicator = false;
@@ -116,6 +118,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
     _showThumbnails = tab.showPdfThumbnails;
     _showSearchBar = tab.showPdfSearch;
     _ocrEnabled = tab.pdfOcrEnabled;
+    _popupDictEnabled = tab.pdfPopupDictEnabled;
     _searchController.text = tab.pdfSearchQuery;
     _sourceName = _filePath ?? widget.tabId;
     _annotations = getIt<PdfAnnotationService>()..initialize(widget.tabId);
@@ -456,6 +459,16 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
       _ocrEnabled ??
       (_pdfOcrService.isSupported && _isCurrentPageMissingTextLayer);
 
+  void _setPopupDictEnabled(bool enabled) {
+    setState(() {
+      _popupDictEnabled = enabled;
+      _popupDictRevision++;
+    });
+    if (!enabled) ChinesePopupDict.hideActivePopup();
+    _tabService.findTab(widget.tabId).pdfPopupDictEnabled = enabled;
+    _tabService.notifyTabStateChanged();
+  }
+
   void _handleOcrToggleRequested(bool enabled) {
     if (kIsWeb) {
       final messenger = ScaffoldMessenger.maybeOf(context);
@@ -515,12 +528,14 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
     BuildContext context,
     PdfPageHitTestResult hit,
   ) async {
-    if (!_pdfOcrService.isSupported ||
+    if (!_popupDictEnabled ||
+        !_pdfOcrService.isSupported ||
         !_isOcrEnabled ||
         _isPerformingOcrLookup) {
       return;
     }
 
+    final popupDictRevision = _popupDictRevision;
     setState(() {
       _isPerformingOcrLookup = true;
       _showProgressIndicator = true;
@@ -532,7 +547,11 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
         page: hit.page,
         pagePoint: hit.offset,
       );
-      if (!mounted || !context.mounted || lookup == null) {
+      if (!mounted ||
+          !context.mounted ||
+          !_popupDictEnabled ||
+          popupDictRevision != _popupDictRevision ||
+          lookup == null) {
         return;
       }
 
@@ -786,6 +805,8 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                     ocrEnabled: _isOcrEnabled,
                     canToggleOcr: _pdfOcrService.isSupported || kIsWeb,
                     onOcrChanged: _handleOcrToggleRequested,
+                    popupDictEnabled: _popupDictEnabled,
+                    onPopupDictChanged: _setPopupDictEnabled,
                     showOcrProgress: _isPerformingOcrLookup,
                   ),
                   if (_showSearchBar && _textSearcher != null)
@@ -995,7 +1016,10 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                                               return false;
                                             }
 
-                                            if (!_isOcrEnabled) return false;
+                                            if (!_popupDictEnabled ||
+                                                !_isOcrEnabled) {
+                                              return false;
+                                            }
 
                                             _handlePdfTap(context, hit);
                                             return true;
@@ -1006,7 +1030,9 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
                                               PdfTextOverlay(
                                                 page: page,
                                                 pageRect: pageRect,
-                                                enabled: !_isOcrEnabled,
+                                                enabled:
+                                                    _popupDictEnabled &&
+                                                    !_isOcrEnabled,
                                                 onTextLayerDetected:
                                                     (hasTextLayer) {
                                                       _onPageTextLayerDetected(

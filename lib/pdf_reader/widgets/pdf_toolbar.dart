@@ -16,6 +16,8 @@ class PdfToolbar extends StatelessWidget {
   final bool ocrEnabled;
   final bool canToggleOcr;
   final ValueChanged<bool> onOcrChanged;
+  final bool popupDictEnabled;
+  final ValueChanged<bool> onPopupDictChanged;
   final bool showOcrProgress;
   final bool canEdit;
   final bool hasSelection;
@@ -40,6 +42,8 @@ class PdfToolbar extends StatelessWidget {
     required this.ocrEnabled,
     required this.canToggleOcr,
     required this.onOcrChanged,
+    required this.popupDictEnabled,
+    required this.onPopupDictChanged,
     this.showOcrProgress = false,
     required this.canEdit,
     required this.hasSelection,
@@ -130,6 +134,25 @@ class PdfToolbar extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12),
             ),
             child: const Text('OCR'),
+          ),
+        ),
+        Tooltip(
+          message: 'Toggle popup dictionary',
+          child: TextButton(
+            onPressed: () => onPopupDictChanged(!popupDictEnabled),
+            style: TextButton.styleFrom(
+              foregroundColor: popupDictEnabled
+                  ? activeOcrColor
+                  : inactiveOcrColor,
+              textStyle: Theme.of(context).textTheme.labelMedium?.copyWith(
+                fontWeight: popupDictEnabled
+                    ? FontWeight.w600
+                    : FontWeight.w400,
+              ),
+              minimumSize: const Size(48, 30),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+            child: const Text('Dict'),
           ),
         ),
 
@@ -230,6 +253,14 @@ class PdfToolbar extends StatelessWidget {
         value: () => onOcrChanged(!ocrEnabled),
         enabled: canToggleOcr,
         child: Text(ocrEnabled ? 'Disable OCR' : 'Enable OCR'),
+      ),
+      PopupMenuItem(
+        value: () => onPopupDictChanged(!popupDictEnabled),
+        child: Text(
+          popupDictEnabled
+              ? 'Disable popup dictionary'
+              : 'Enable popup dictionary',
+        ),
       ),
     ],
   );
