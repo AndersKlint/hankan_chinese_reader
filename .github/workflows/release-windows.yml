@@ -1,0 +1,98 @@
+name: Release Windows
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: hankan_chinese_reader
+    shell: pwsh
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: hankan_chinese_reader
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: AndersKlint/flutter_package_chinese_popup_dict
+          path: chinese_popup_dict
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: AndersKlint/dart_paddle_ocr
+          path: dart_paddle_ocr
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+      - name: Build and package
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          IS_TAG: ${{ startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = if ($env:IS_TAG -eq 'true') { $env:RELEASE_TAG -replace '^v', '' } else {
+            ((Select-String -Path pubspec.yaml -Pattern '^version:\s*(\S+)').Matches.Groups[1].Value -split '\+')[0]
+          }
+          if ($version -notmatch '^(\d+\.\d+\.\d+)(?:-[0-9A-Za-z.-]+)?$') { throw "Invalid version: $version" }
+          $numericVersion = $Matches[1]
+          $label = if ($env:IS_TAG -eq 'true') { $env:RELEASE_TAG } else { "v$version" }
+          flutter pub get
+          if ($LASTEXITCODE -ne 0) { throw 'pub get failed' }
+          flutter build windows --release --build-name=$numericVersion --build-number=${{ github.run_number }}
+          if ($LASTEXITCODE -ne 0) { throw 'Windows build failed' }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $bundle = (Resolve-Path build/windows/x64/runner/Release).Path
+          $output = (Resolve-Path dist).Path
+          $base = "HanKan-windows-x64-setup-$label"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$version" "/DSourceDir=$bundle" "/DOutputDir=$output" "/DOutputName=$base" scripts/inno_installer.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Installer build failed' }
+          Compress-Archive -Path "$bundle/*" -DestinationPath "dist/HanKan-windows-x64-$label.zip"
+          Get-ChildItem dist -File | Sort-Object Name | ForEach-Object {
+            "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name
+          } | Set-Content dist/SHA256SUMS-windows-x64 -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hankan-windows-x64
+          if-no-files-found: error
+          compression-level: 0
+          path: ${{ github.workspace }}/hankan_chinese_reader/dist/*
+
+  publish:
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: hankan-release-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: hankan-windows-x64
+          path: release-assets
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: HanKan ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/HanKan-windows-x64-${{ github.ref_name }}.zip
+            release-assets/HanKan-windows-x64-setup-${{ github.ref_name }}.exe
+            release-assets/SHA256SUMS-windows-x64

@@ -1,7 +1,7 @@
 app-id: com.andersklint.hankan_chinese_reader
-runtime: org.freedesktop.Platform
-runtime-version: '24.08'
-sdk: org.freedesktop.Sdk
+runtime: org.gnome.Platform
+runtime-version: '48'
+sdk: org.gnome.Sdk
 command: hankan_chinese_reader
 appstream-compose: false
 

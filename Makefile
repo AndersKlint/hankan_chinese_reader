@@ -5,10 +5,9 @@ BUNDLE := hankan_chinese_reader.flatpak
 .PHONY: flatpak clean
 
 flatpak:
-	flutter build linux --release
-	flatpak-builder --repo=repo build-dir $(MANIFEST) --force-clean
+	flutter build linux --release $(FLUTTER_BUILD_FLAGS)
+	flatpak-builder --user --repo=repo build-dir $(MANIFEST) --force-clean
 	flatpak build-bundle repo $(BUNDLE) $(APP_ID)
-	flatpak install $(BUNDLE)
 
 clean:
 	rm -rf build-dir repo .flatpak-builder $(BUNDLE)

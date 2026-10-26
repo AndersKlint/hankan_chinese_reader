@@ -65,31 +65,79 @@ lib/
 
 ### Prerequisites
 
-- Flutter SDK 3.11.0 or later
+- Flutter SDK 3.47.2 stable (includes Dart 3.13)
+- Java 17 and Android SDK for Android builds
 - iOS/Android/Desktop/Web platform support
 
 ### Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/anders/hankan_chinese_reader.git
+git clone https://github.com/AndersKlint/hankan_chinese_reader.git
+git clone https://github.com/AndersKlint/flutter_package_chinese_popup_dict.git chinese_popup_dict
+git clone https://github.com/AndersKlint/dart_paddle_ocr.git dart_paddle_ocr
 cd hankan_chinese_reader
 
-# Get dependencies
 flutter pub get
 
-# Run the app
 flutter run
 ```
 
-### Setup the Popup Dictionary Package
+### Sibling Packages and Android OCR
 
-This app uses `chinese_popup_dict` as a local dependency. Ensure the sibling package is available:
+Both private packages must be checked out beside this repository under the exact directory names `chinese_popup_dict` and `dart_paddle_ocr`. Authenticate Git with an account that can read both repositories. Before building Android, install the OCR plugin's NCNN native dependencies:
 
 ```bash
-cd ../chinese_popup_dict
-flutter pub get
+bash ../dart_paddle_ocr/android/src/main/cpp/setup_ncnn_deps.sh
 ```
+
+## Releases
+
+Release version: **0.5.1-beta** (`pubspec.yaml`: `0.5.1-beta+1`). Release workflows use Flutter 3.47.2 stable. Pushing a `v*` tag builds platform assets and publishes them to the same GitHub release named `HanKan <tag>`. Tags containing `-` are prereleases. Manual workflow dispatch builds downloadable Actions artifacts only, without creating or updating a release.
+
+Configure `PRIVATE_REPO_TOKEN` as a repository Actions secret with read access to **both** `AndersKlint/flutter_package_chinese_popup_dict` and `AndersKlint/dart_paddle_ocr` (fine-grained token: Contents read access to both repositories). The default `GITHUB_TOKEN` cannot read other private repositories.
+
+### Android Signing
+
+Both manual and tag Android builds require these repository Actions secrets:
+
+| Secret | Value |
+|--------|-------|
+| `ANDROID_KEYSTORE_BASE64` | Base64-encoded persistent release keystore |
+| `ANDROID_KEYSTORE_PASSWORD` | Keystore password |
+| `ANDROID_KEY_ALIAS` | Signing key alias |
+| `ANDROID_KEY_PASSWORD` | Signing key password |
+
+Use your existing release key if available. Otherwise create one once, outside the repository:
+
+```bash
+keytool -genkeypair -v -keystore "$HOME/hankan-release.jks" -storetype JKS -alias hankan -keyalg RSA -keysize 4096 -validity 10000
+base64 -w 0 "$HOME/hankan-release.jks"
+```
+
+Save the base64 output as `ANDROID_KEYSTORE_BASE64` in GitHub **Settings → Secrets and variables → Actions**; add the passwords and alias as the other secrets. Keep a secure backup of the keystore and credentials: future updates must use the same signing key. Never commit them. Missing signing secrets fail the workflow before building.
+
+Local release builds use environment variables `ANDROID_KEYSTORE_PATH` (absolute keystore path), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. Release signing has no debug-key fallback.
+
+Android produces a universal APK supporting arm64-v8a, armeabi-v7a, and x86_64, including the OCR native libraries. For `v0.5.1-beta`, the release assets are:
+
+| Platform | Assets | Checksums |
+| --- | --- | --- |
+| Android | `HanKan-android-v0.5.1-beta.apk` | `SHA256SUMS-android` |
+| Windows | `HanKan-windows-x64-v0.5.1-beta.zip`, `HanKan-windows-x64-setup-v0.5.1-beta.exe` | `SHA256SUMS-windows-x64` |
+| Linux | `HanKan-linux-x64-v0.5.1-beta.flatpak` | `SHA256SUMS-linux-x64` |
+
+The Actions artifact is `hankan-android`. Manual builds use the version name and build number from `pubspec.yaml`; tag builds use the exact tag in filenames, strip the leading `v` for the Android version name, and use the workflow run number as the Android version code. Verify a downloaded APK with `sha256sum -c SHA256SUMS-android`.
+
+### Publish v0.5.1-beta
+
+After merging the release changes and configuring secrets, run:
+
+```bash
+git tag v0.5.1-beta
+git push origin v0.5.1-beta
+```
+
+The Windows installer/portable ZIP, Linux Flatpak, and Android workflows publish independently to the same non-draft release for this tag.
 
 ## Usage
 
